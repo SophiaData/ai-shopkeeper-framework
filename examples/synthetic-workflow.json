@@ -1,0 +1,37 @@
+{
+  "example": true,
+  "synthetic": true,
+  "note": "形状示意，仅供阅读；不能直接导入真实平台或数据库。金额与身份都是虚构值。",
+  "listing": {
+    "id": "example-listing-001",
+    "shop_id": "example-shop",
+    "product_name": "演示收纳盒",
+    "status": "draft",
+    "version": 1,
+    "currency": "THB",
+    "price_satang": 19900,
+    "title_th": "กล่องเก็บของตัวอย่าง",
+    "title_zh": "演示收纳盒（合成标题）",
+    "platform_product_id": null
+  },
+  "approval": {
+    "id": "example-approval-001",
+    "action_type": "create_listing",
+    "entity_id": "example-listing-001",
+    "listing_version": 1,
+    "status": "pending",
+    "decision": null
+  },
+  "order": {
+    "id": "example-order-001",
+    "platform": "mock",
+    "shop_id": "example-shop",
+    "listing_id": "example-listing-001",
+    "status": "PAID",
+    "quantity": 1,
+    "currency": "THB",
+    "item_amount_satang": 19900,
+    "buyer": null,
+    "shipping_address": null
+  }
+}

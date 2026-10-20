@@ -1,0 +1,35 @@
+# 非 Docker 部署示例：复制到 /etc/systemd/system/shopkeeper.service 后
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now shopkeeper
+# 请按本机路径改 WorkingDirectory / User / EnvironmentFile。
+# 默认不打开 TTS 真写、飞书外呼、发货/退款/付款。
+
+[Unit]
+Description=AI Shopkeeper Thailand workflow (uvicorn)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=shopkeeper
+Group=shopkeeper
+WorkingDirectory=/opt/ai-shopkeeper
+EnvironmentFile=-/opt/ai-shopkeeper/.env
+Environment=PYTHONPATH=src
+Environment=WORKFLOW_HOST=127.0.0.1
+Environment=WORKFLOW_PORT=8780
+Environment=WORKFLOW_SCHEDULER=1
+# 安全默认（.env 可覆盖；勿在此写入真实密钥）
+Environment=TTS_WRITE_ENABLED=0
+Environment=FEISHU_NOTIFY=0
+Environment=BACKUP_DAILY=1
+ExecStart=/usr/bin/python3 -m shopkeeper.workflow.serve
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+# 进程挂死后由 systemd 拉起；探活可用：curl -sf http://127.0.0.1:8780/healthz
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

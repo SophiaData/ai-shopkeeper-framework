@@ -1,0 +1,7 @@
+.git
+.venv
+artifacts
+**/__pycache__
+.pytest_cache
+spike
+*.egg-info

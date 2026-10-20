@@ -1,0 +1,123 @@
+{
+  "name": "晚间复盘提醒（存根）",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 人工卡点\n\n21:00 只提醒你去做复盘。\nWebhook 接收你已经导出的指标，不连接卖家中心。\n改价、加广告、下架由你在 Seller Center 点击。\n激活 Webhook 前确认路径里没有密钥。",
+        "height": 260,
+        "width": 420
+      },
+      "id": "c7d2e5f3-8011-4b2c-8d41-22bb00000001",
+      "name": "人工卡点",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 21 * * 1-6"
+            }
+          ]
+        }
+      },
+      "id": "c7d2e5f3-8011-4b2c-8d41-22bb00000002",
+      "name": "工作日 21:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "seller-daily-metrics",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "c7d2e5f3-8011-4b2c-8d41-22bb00000003",
+      "name": "贴入已导出指标",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        620
+      ],
+      "webhookId": "seller-daily-metrics"
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "evening-message",
+              "name": "message",
+              "value": "【泰国站家居收纳 · 晚间复盘】请把卖家中心官方导出的曝光、点击、订单、退货和广告花费交给复盘助手或 scripts/daily_report.py。未导出的数字保持空白。今天只选 1 个主实验（改标题、换 Hook 或补一条视频）。改价、加广告、下架由你本人点击。",
+              "type": "string"
+            },
+            {
+              "id": "evening-human",
+              "name": "human_checkpoint",
+              "value": "付费和改价必须由卖家在卖家中心手动确认",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c7d2e5f3-8011-4b2c-8d41-22bb00000004",
+      "name": "生成复盘提醒",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        560,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "工作日 21:00": {
+      "main": [
+        [
+          {
+            "node": "生成复盘提醒",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "贴入已导出指标": {
+      "main": [
+        [
+          {
+            "node": "生成复盘提醒",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Bangkok"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

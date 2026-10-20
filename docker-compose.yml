@@ -1,0 +1,98 @@
+# 生产向默认：restart + healthcheck + 资源上限 + artifacts 卷。
+# 宿主机只绑 127.0.0.1；TTS 真写 / 飞书外呼默认关；BACKUP_DAILY / PII_PURGE_DAILY 默认可开。
+# 真实密钥只进 .env（已 gitignore），不要写进本文件。
+services:
+  shopkeeper:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8780:8780"
+    env_file:
+      - .env
+    environment:
+      WORKFLOW_HOST: "0.0.0.0"
+      WORKFLOW_PORT: "8780"
+      WORKFLOW_SCHEDULER: "1"
+      WORKFLOW_WORKER_INLINE: "${WORKFLOW_WORKER_INLINE:-1}"
+      WORKFLOW_REQUIRE_WORKER: "${WORKFLOW_REQUIRE_WORKER:-0}"
+      # 安全默认：写通道 mock 可本地验收；真写与飞书外呼关；每日备份开。
+      # PII 每日任务可开，但演练默认开（不写库）。真覆写须 PII_PURGE_DRY_RUN=0。
+      WORKFLOW_PLATFORM: "${WORKFLOW_PLATFORM:-mock}"
+      WORKFLOW_LLM_PROVIDER: "${WORKFLOW_LLM_PROVIDER:-mock}"
+      TTS_WRITE_ENABLED: "${TTS_WRITE_ENABLED:-0}"
+      TIKTOK_ADS_ENABLED: "${TIKTOK_ADS_ENABLED:-0}"
+      FEISHU_NOTIFY: "${FEISHU_NOTIFY:-0}"
+      FEISHU_CALLBACK_ALLOW_INSECURE: "0"
+      BACKUP_DAILY: "${BACKUP_DAILY:-1}"
+      BACKUP_DIR: "${BACKUP_DIR:-artifacts/backups}"
+      BACKUP_KEEP: "${BACKUP_KEEP:-14}"
+      PII_RETENTION_DAYS: "${PII_RETENTION_DAYS:-90}"
+      PII_PURGE_DAILY: "${PII_PURGE_DAILY:-1}"
+      PII_PURGE_DRY_RUN: "${PII_PURGE_DRY_RUN:-1}"
+      ARTIFACTS_DIR: "${ARTIFACTS_DIR:-artifacts}"
+      ORCHESTRATOR_AUTORUN: "${ORCHESTRATOR_AUTORUN:-0}"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+      LOG_FORMAT: "${LOG_FORMAT:-text}"
+      DATABASE_URL: "${DATABASE_URL:-sqlite:///./artifacts/shopkeeper.db}"
+      WORKFLOW_DB_PATH: "${WORKFLOW_DB_PATH:-artifacts/workflow.db}"
+    volumes:
+      - ./artifacts:/app/artifacts
+      - ./scripts/fixtures:/app/scripts/fixtures:ro
+    # 合理默认；可按机器改。Compose V2 对 deploy.resources 在 up 时生效。
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/healthz' % os.environ.get('WORKFLOW_PORT','8780'), timeout=4)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+
+  worker:
+    profiles: ["split-worker"]
+    build: .
+    restart: unless-stopped
+    command: ["python", "-m", "shopkeeper.workflow.worker"]
+    env_file:
+      - .env
+    environment:
+      WORKFLOW_WORKER_INLINE: "0"
+      WORKFLOW_WORKER_POLL_S: "${WORKFLOW_WORKER_POLL_S:-1.0}"
+      WORKFLOW_WORKER_LEASE_S: "${WORKFLOW_WORKER_LEASE_S:-90}"
+      WORKFLOW_DB_PATH: "${WORKFLOW_DB_PATH:-artifacts/workflow.db}"
+      DATABASE_URL: "${DATABASE_URL:-sqlite:///./artifacts/shopkeeper.db}"
+    volumes:
+      - ./artifacts:/app/artifacts
+      - ./scripts/fixtures:/app/scripts/fixtures:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 384M
+        reservations:
+          cpus: "0.1"
+          memory: 96M
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os; from shopkeeper.workflow.store import WorkflowStore; h=WorkflowStore(os.getenv('WORKFLOW_DB_PATH','artifacts/workflow.db')).worker_health(); raise SystemExit(0 if h['alive'] else 1)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

@@ -1,0 +1,95 @@
+{
+  "name": "上午待发货与低库存提醒（存根）",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 人工卡点\n\n这条工作流只生成提醒文字。\n请你本人登录 TikTok Shop Seller Center（泰国站）查看待发货、售后和库存。\n打单、采购和付款由你完成。\n不要在此添加登录后台或抓取页面的节点。",
+        "height": 260,
+        "width": 420
+      },
+      "id": "b6c1d4e2-7f10-4a1b-9c30-11aa00000001",
+      "name": "人工卡点",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 8 * * 1-6"
+            }
+          ]
+        }
+      },
+      "id": "b6c1d4e2-7f10-4a1b-9c30-11aa00000002",
+      "name": "工作日 08:30",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "morning-message",
+              "name": "message",
+              "value": "【泰国站家居收纳 · 上午清单】请你本人登录 TikTok Shop Seller Center，核对待发货、售后消息和低库存。本提醒不登录店铺、不打单、不付款。库存以卖家中心为准；没有官方导出时，不要改用抓取。核对后把你自己的表交给 scripts/daily_report.py 或晚间复盘。",
+              "type": "string"
+            },
+            {
+              "id": "morning-human",
+              "name": "human_checkpoint",
+              "value": "登录、发货、采购付款由卖家本人完成",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b6c1d4e2-7f10-4a1b-9c30-11aa00000003",
+      "name": "生成上午清单",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        560,
+        420
+      ]
+    }
+  ],
+  "connections": {
+    "工作日 08:30": {
+      "main": [
+        [
+          {
+            "node": "生成上午清单",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Bangkok"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

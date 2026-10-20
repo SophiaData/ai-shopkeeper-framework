@@ -1,0 +1,381 @@
+{
+  "disclaimer": "本词表仅含公开常识类禁用/敏感用语示例，供 TikTok Shop 泰国站家居收纳类 listing 质检使用。非法律意见，不能替代平台官方禁发词库或律师审查；上线前须店铺 owner / 合规人工复核，并随平台政策更新。",
+  "version": 1,
+  "site_aliases": {
+    "SEA": "TH"
+  },
+  "language_as_site": ["EN", "ZH", "VI"],
+  "terms": [
+    {
+      "term": "cure",
+      "severity": "block",
+      "category": "medical",
+      "sites": ["*"],
+      "note": "疗效声称词根；屈折由匹配器覆盖"
+    },
+    {
+      "term": "heal",
+      "severity": "block",
+      "category": "medical",
+      "sites": ["*"]
+    },
+    {
+      "term": "medically proven",
+      "severity": "block",
+      "category": "medical",
+      "sites": ["*"]
+    },
+    {
+      "term": "clinically proven",
+      "severity": "block",
+      "category": "medical",
+      "sites": ["*"]
+    },
+    {
+      "term": "miracle cure",
+      "severity": "block",
+      "category": "medical",
+      "sites": ["*"]
+    },
+    {
+      "term": "FDA approved",
+      "severity": "block",
+      "category": "medical",
+      "sites": ["*"],
+      "note": "家居收纳常见虚假认证声称"
+    },
+    {
+      "term": "治疗",
+      "severity": "block",
+      "category": "medical",
+      "sites": ["*"]
+    },
+    {
+      "term": "治愈",
+      "severity": "block",
+      "category": "medical",
+      "sites": ["*"]
+    },
+    {
+      "term": "疗效",
+      "severity": "block",
+      "category": "medical",
+      "sites": ["*"]
+    },
+    {
+      "term": "药到病除",
+      "severity": "block",
+      "category": "medical",
+      "sites": ["*"]
+    },
+    {
+      "term": "根治",
+      "severity": "block",
+      "category": "medical",
+      "sites": ["*"]
+    },
+    {
+      "term": "医用",
+      "severity": "block",
+      "category": "medical",
+      "sites": ["*"]
+    },
+    {
+      "term": "医疗",
+      "severity": "block",
+      "category": "medical",
+      "sites": ["*"]
+    },
+    {
+      "term": "杀菌",
+      "severity": "block",
+      "category": "medical",
+      "sites": ["*"]
+    },
+    {
+      "term": "减肥药",
+      "severity": "block",
+      "category": "medical",
+      "sites": ["*"]
+    },
+    {
+      "term": "丰胸",
+      "severity": "block",
+      "category": "medical",
+      "sites": ["*"]
+    },
+    {
+      "term": "壮阳",
+      "severity": "block",
+      "category": "medical",
+      "sites": ["*"]
+    },
+    {
+      "term": "抗癌",
+      "severity": "block",
+      "category": "medical",
+      "sites": ["*"]
+    },
+    {
+      "term": "排毒",
+      "severity": "block",
+      "category": "medical",
+      "sites": ["*"]
+    },
+    {
+      "term": "รักษาโรค",
+      "severity": "block",
+      "category": "medical",
+      "sites": ["*", "TH"]
+    },
+    {
+      "term": "หายขาด",
+      "severity": "block",
+      "category": "medical",
+      "sites": ["*", "TH"]
+    },
+    {
+      "term": "ยารักษา",
+      "severity": "block",
+      "category": "medical",
+      "sites": ["*", "TH"]
+    },
+    {
+      "term": "100%保证",
+      "severity": "block",
+      "category": "absolute",
+      "sites": ["*"]
+    },
+    {
+      "term": "100%防水",
+      "severity": "block",
+      "category": "absolute",
+      "sites": ["*"]
+    },
+    {
+      "term": "绝对防水",
+      "severity": "block",
+      "category": "absolute",
+      "sites": ["*"]
+    },
+    {
+      "term": "完全防水",
+      "severity": "block",
+      "category": "absolute",
+      "sites": ["*"]
+    },
+    {
+      "term": "永久不坏",
+      "severity": "block",
+      "category": "absolute",
+      "sites": ["*"]
+    },
+    {
+      "term": "食品级",
+      "severity": "block",
+      "category": "absolute",
+      "sites": ["*"],
+      "note": "未验证材质认证声称；有检测报告时由人工复核后可改文案"
+    },
+    {
+      "term": "food grade",
+      "severity": "block",
+      "category": "absolute",
+      "sites": ["*"]
+    },
+    {
+      "term": "กันน้ำ100%",
+      "severity": "block",
+      "category": "absolute",
+      "sites": ["*", "TH"]
+    },
+    {
+      "term": "การันตี100%",
+      "severity": "block",
+      "category": "absolute",
+      "sites": ["*", "TH"]
+    },
+    {
+      "term": "never breaks",
+      "severity": "block",
+      "category": "absolute",
+      "sites": ["*"]
+    },
+    {
+      "term": "absolutely waterproof",
+      "severity": "block",
+      "category": "absolute",
+      "sites": ["*"]
+    },
+    {
+      "term": "第一名",
+      "severity": "block",
+      "category": "absolute",
+      "sites": ["*"]
+    },
+    {
+      "term": "官方正品",
+      "severity": "block",
+      "category": "absolute",
+      "sites": ["*"]
+    },
+    {
+      "term": "best in the world",
+      "severity": "warn",
+      "category": "absolute",
+      "sites": ["*"],
+      "note": "绝对化软警告；不用裸词 best 以免误杀 best-selling"
+    },
+    {
+      "term": "the best ever",
+      "severity": "warn",
+      "category": "absolute",
+      "sites": ["*"]
+    },
+    {
+      "term": "最好的选择",
+      "severity": "warn",
+      "category": "absolute",
+      "sites": ["*"]
+    },
+    {
+      "term": "完美无瑕",
+      "severity": "warn",
+      "category": "absolute",
+      "sites": ["*"]
+    },
+    {
+      "term": "ดีที่สุดในโลก",
+      "severity": "warn",
+      "category": "absolute",
+      "sites": ["*", "TH"]
+    },
+    {
+      "term": "全网最低",
+      "severity": "block",
+      "category": "price_fraud",
+      "sites": ["*"]
+    },
+    {
+      "term": "假一赔十",
+      "severity": "block",
+      "category": "price_fraud",
+      "sites": ["*"]
+    },
+    {
+      "term": "史上最低",
+      "severity": "block",
+      "category": "price_fraud",
+      "sites": ["*"]
+    },
+    {
+      "term": "虚假原价",
+      "severity": "block",
+      "category": "price_fraud",
+      "sites": ["*"]
+    },
+    {
+      "term": "虚构原价",
+      "severity": "block",
+      "category": "price_fraud",
+      "sites": ["*"]
+    },
+    {
+      "term": "lowest price in the world",
+      "severity": "block",
+      "category": "price_fraud",
+      "sites": ["*"]
+    },
+    {
+      "term": "ราคาถูกที่สุดในโลก",
+      "severity": "block",
+      "category": "price_fraud",
+      "sites": ["*", "TH"]
+    },
+    {
+      "term": "IKEA",
+      "severity": "block",
+      "category": "ip_brand",
+      "sites": ["*"],
+      "note": "未授权品牌词；正品分销须人工证明后改文案"
+    },
+    {
+      "term": "宜家",
+      "severity": "block",
+      "category": "ip_brand",
+      "sites": ["*"]
+    },
+    {
+      "term": "ไอเกีย",
+      "severity": "block",
+      "category": "ip_brand",
+      "sites": ["*", "TH"]
+    },
+    {
+      "term": "MUJI",
+      "severity": "block",
+      "category": "ip_brand",
+      "sites": ["*"]
+    },
+    {
+      "term": "无印良品",
+      "severity": "block",
+      "category": "ip_brand",
+      "sites": ["*"]
+    },
+    {
+      "term": "มูจิ",
+      "severity": "block",
+      "category": "ip_brand",
+      "sites": ["*", "TH"]
+    },
+    {
+      "term": "Hello Kitty",
+      "severity": "block",
+      "category": "ip_brand",
+      "sites": ["*"]
+    },
+    {
+      "term": "เฮลโลคิตตี้",
+      "severity": "block",
+      "category": "ip_brand",
+      "sites": ["*", "TH"]
+    },
+    {
+      "term": "Disney",
+      "severity": "block",
+      "category": "ip_brand",
+      "sites": ["*"]
+    },
+    {
+      "term": "ดิสนีย์",
+      "severity": "block",
+      "category": "ip_brand",
+      "sites": ["*", "TH"]
+    },
+    {
+      "term": "佛像",
+      "severity": "block",
+      "category": "restricted",
+      "sites": ["TH"]
+    },
+    {
+      "term": "烟草",
+      "severity": "block",
+      "category": "restricted",
+      "sites": ["TH"]
+    },
+    {
+      "term": "พระพุทธรูป",
+      "severity": "block",
+      "category": "restricted",
+      "sites": ["TH"]
+    },
+    {
+      "term": "บุหรี่",
+      "severity": "block",
+      "category": "restricted",
+      "sites": ["TH"]
+    }
+  ]
+}

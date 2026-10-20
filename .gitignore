@@ -1,0 +1,41 @@
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+# 管理后台 Vite 产物需入库（FastAPI 静态托管；CI 也会再构建一次）
+!src/shopkeeper/admin/dist/
+!src/shopkeeper/admin/dist/**
+
+# env & secrets
+.env
+.env.*
+!.env.example
+*.key
+
+# node
+node_modules/
+
+# local artifacts / demo 产物
+artifacts/
+spike/**/out/
+spike/**/*.png
+spike/**/*.jpg
+spike/**/_raw_*.json
+# 第三方页面快照（1.5MB，含平台下发脚本与卖家信息）：本地留档即可，不进库
+spike/**/sample/
+*.db
+*.sqlite3
+
+# ddl-verify 临时
+docs/ddl-verify/*.tmp
+
+# Rust / Tauri 构建产物（P3-01 加真编译后必须忽略，否则 2.5G 的 target/ 会被误提交）
+apps/desktop/src-tauri/target/
+**/*.rs.bk
+
+# 本地任务备份（交接/排障临时产物，不随仓库分发）
+backups/

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>AI 店长</title>
+    <meta
+      name="description"
+      content="Desktop shell placeholder. The real UI is the FastAPI /workflow page — not a second frontend."
+    />
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 2rem;
+        color: #1a1a1a;
+        background: #f4f6f8;
+      }
+      code {
+        background: #e8ecf0;
+        padding: 0.1em 0.35em;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>AI 店长</h1>
+    <p>
+      桌面壳不另写界面。若未自动跳转，请先启动本机工作台，再打开
+      <code>http://127.0.0.1:&lt;WORKFLOW_PORT&gt;/workflow</code>。
+    </p>
+    <p>默认端口 <code>8000</code>。步骤见 <code>apps/desktop/README.md</code>。</p>
+    <script>
+      (function () {
+        var params = new URLSearchParams(window.location.search);
+        var port = params.get("port") || "8000";
+        if (!/^\d{2,5}$/.test(port)) port = "8000";
+        window.location.replace("http://127.0.0.1:" + port + "/workflow");
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,23 @@
+[package]
+name = "shopkeeper-desktop"
+version = "0.1.0"
+description = "Tauri 2 shell: opens local FastAPI /workflow (DESIGN §5). No separate UI."
+authors = ["ai-shopkeeper"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "shopkeeper_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

@@ -1,0 +1,1255 @@
+
+
+==================== RUN 2026-10-10 18:41:43 +0800 ====================
+
+# M1 双库建库与 join 级关键查询校验
+# generated_by: scripts/ddl_verify.py
+# at: 2026-10-10 18:41:34 +0800
+
+
+--- sqlite: python -c version header ---
+$ python -c "import sqlite3;print(sqlite3.sqlite_version)"
+sqlite3 3.43.1
+[exit code: 0]
+
+--- sqlite: create_all (SQLAlchemy M1 models) ---
+# created tables = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# expected = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# inspect() sees = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+
+--- sqlite: join-level key query (products x listings x listing_versions x tasks) ---
+# SQL: SELECT count(*) AS listing_rows, sum(json_array_length(JSON_EXTRACT(listing_versions.payload, '$."langs"'))) AS langs_total  FROM listing_versions JOIN listings ON listings.id = listing_versions.listing_id JOIN products ON products.id = listings.product_id JOIN tasks ON tasks.id = listing_versions.created_by_task  WHERE tasks.status = 'succeeded'
+# RESULT listing_rows=1 langs_total=3
+
+--- pg: start throwaway container ---
+$ docker run -d --name shopkeeper-m1-ddlverify -p 127.0.0.1:15432:5432 docker.m.daocloud.io/library/postgres:15
+3c74d1df3663d4dbe8f87077182c2a8f8fb1e55302d54052d06a8e0389b26101
+[exit code: 0]
+$ psql -c 'CREATE DATABASE m1_verify'
+CREATE DATABASE
+[exit code: 0]
+$ psql -c 'SELECT version()'
+                                                       version                                                        
+----------------------------------------------------------------------------------------------------------------------
+ PostgreSQL 15.19 (Debian 15.19-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+(1 row)
+[exit code: 0]
+# 来源文件: docs\ddl-verify\ddl.sql
+# CREATE TABLE 语句数 = 43
+
+--- pg: full frozen DDL (docs/ddl-verify/ddl.sql, 43 tables) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 555 lines)
+
+[exit code: 0]
+
+--- pg: table count after full DDL ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+   k    | v  
+--------+----
+ tables | 43
+(1 row)
+[exit code: 0]
+
+--- pg: R8 key query (orders x ledger_entries) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+       t        | count 
+----------------+-------
+ orders         |     0
+ ledger_entries |     0
+(2 rows)
+[exit code: 0]
+
+--- pg: SQLAlchemy M1 models -> PG DDL (dialect-compiled) ---
+# M1 模型编译出 6 张表；先建到 schema m1_orm 以隔离全量 DDL
+
+--- pg: create m1_orm schema ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+
+[exit code: 0]
+
+--- pg: create M1 ORM tables on PostgreSQL ---
+# psql -v ON_ERROR_STOP=1 (stdin, 94 lines)
+NOTICE:  extension "btree_gist" already exists, skipping
+[exit code: 0]
+
+--- pg: insert M1 fixture rows ---
+# psql -v ON_ERROR_STOP=1 (stdin, 6 lines)
+
+[exit code: 0]
+
+--- pg: join-level key query (listing_versions x listings x products x tasks) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 2 lines)
+ listing_rows | langs_total 
+--------------+-------------
+            1 |           3
+(1 row)
+[exit code: 0]
+
+--- pg: M1 table row counts ---
+# psql -v ON_ERROR_STOP=1 (stdin, 2 lines)
+        t         | count 
+------------------+-------
+ shops            |     1
+ products         |     1
+ tasks            |     1
+ listings         |     1
+ listing_versions |     1
+ tool_calls       |     0
+(6 rows)
+[exit code: 0]
+
+--- pg: teardown ---
+$ docker rm -f shopkeeper-m1-ddlverify
+shopkeeper-m1-ddlverify
+[exit code: 0]
+
+--- evidence scope (three-column discipline) ---
+# 已验证: 本次运行内 SQLite 与 PostgreSQL15 均真实建库；join 级关键查询在两库返回同形态结果；冻结 43 表 DDL 在 PG 上 ON_ERROR_STOP=1 执行完毕且表数=43。
+# 刻意未验: PG 侧 SQLAlchemy 表建在独立 schema m1_orm，未验证与 43 表全量 schema 的共存合并（M2 落全量模型时再验）；SQLite 侧不验证 PG 专有约束（btree_gist EXCLUDE、TIMESTAMPTZ 精度）；未做并发写入下的幂等键竞态压测（单测覆盖语义，不覆盖竞态窗口）。
+# 不可宣称: 本日志证明『本次能建库、查询能跑』，不证明性能与容量；也不证明 orders 等 M2 表业务语义正确（本轮只建表不写业务）。
+
+
+==================== RUN 2026-10-10 19:04:43 +0800 ====================
+
+# M1 双库建库与 join 级关键查询校验
+# generated_by: scripts/ddl_verify.py
+# at: 2026-10-10 19:04:35 +0800
+
+
+--- sqlite: python -c version header ---
+$ python -c "import sqlite3;print(sqlite3.sqlite_version)"
+sqlite3 3.43.1
+[exit code: 0]
+
+--- sqlite: create_all (SQLAlchemy M1 models) ---
+# created tables = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# expected = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# inspect() sees = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+
+--- sqlite: join-level key query (products x listings x listing_versions x tasks) ---
+# SQL: SELECT count(*) AS listing_rows, sum(json_array_length(JSON_EXTRACT(listing_versions.payload, '$."langs"'))) AS langs_total  FROM listing_versions JOIN listings ON listings.id = listing_versions.listing_id JOIN products ON products.id = listings.product_id JOIN tasks ON tasks.id = listing_versions.created_by_task  WHERE tasks.status = 'succeeded'
+# RESULT listing_rows=1 langs_total=3
+
+--- pg: start throwaway container ---
+$ docker run -d --name shopkeeper-m1-ddlverify -p 127.0.0.1:15432:5432 docker.m.daocloud.io/library/postgres:15
+6a4cb5a9b05e2b42f5f36d0d1789aeb80413cc52597bc749b871d3c9f32647eb
+[exit code: 0]
+$ psql -c 'CREATE DATABASE m1_verify'
+CREATE DATABASE
+[exit code: 0]
+$ psql -c 'SELECT version()'
+                                                       version                                                        
+----------------------------------------------------------------------------------------------------------------------
+ PostgreSQL 15.19 (Debian 15.19-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+(1 row)
+[exit code: 0]
+# 来源文件: docs\ddl-verify\ddl.sql
+# CREATE TABLE 语句数 = 43
+
+--- pg: full frozen DDL (docs/ddl-verify/ddl.sql, 43 tables) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 555 lines)
+
+[exit code: 0]
+
+--- pg: table count after full DDL ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+   k    | v  
+--------+----
+ tables | 43
+(1 row)
+[exit code: 0]
+
+--- pg: R8 key query (orders x ledger_entries) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+       t        | count 
+----------------+-------
+ orders         |     0
+ ledger_entries |     0
+(2 rows)
+[exit code: 0]
+
+--- pg: SQLAlchemy M1 models -> PG DDL (dialect-compiled) ---
+# M1 模型编译出 6 张表；先建到 schema m1_orm 以隔离全量 DDL
+
+--- pg: create m1_orm schema ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+
+[exit code: 0]
+
+--- pg: create M1 ORM tables on PostgreSQL ---
+# psql -v ON_ERROR_STOP=1 (stdin, 94 lines)
+NOTICE:  extension "btree_gist" already exists, skipping
+[exit code: 0]
+
+--- pg: insert M1 fixture rows ---
+# psql -v ON_ERROR_STOP=1 (stdin, 6 lines)
+
+[exit code: 0]
+
+--- pg: join-level key query (listing_versions x listings x products x tasks) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 2 lines)
+ listing_rows | langs_total 
+--------------+-------------
+            1 |           3
+(1 row)
+[exit code: 0]
+
+--- pg: M1 table row counts ---
+# psql -v ON_ERROR_STOP=1 (stdin, 2 lines)
+        t         | count 
+------------------+-------
+ shops            |     1
+ products         |     1
+ tasks            |     1
+ listings         |     1
+ listing_versions |     1
+ tool_calls       |     0
+(6 rows)
+[exit code: 0]
+
+--- pg: teardown ---
+$ docker rm -f shopkeeper-m1-ddlverify
+shopkeeper-m1-ddlverify
+[exit code: 0]
+
+--- evidence scope (three-column discipline) ---
+# 已验证: 本次运行内 SQLite 与 PostgreSQL15 均真实建库；join 级关键查询在两库返回同形态结果；冻结 43 表 DDL 在 PG 上 ON_ERROR_STOP=1 执行完毕且表数=43。
+# 刻意未验: PG 侧 SQLAlchemy 表建在独立 schema m1_orm，未验证与 43 表全量 schema 的共存合并（M2 落全量模型时再验）；SQLite 侧不验证 PG 专有约束（btree_gist EXCLUDE、TIMESTAMPTZ 精度）；未做并发写入下的幂等键竞态压测（单测覆盖语义，不覆盖竞态窗口）。
+# 不可宣称: 本日志证明『本次能建库、查询能跑』，不证明性能与容量；也不证明 orders 等 M2 表业务语义正确（本轮只建表不写业务）。
+
+
+==================== RUN 2026-10-10 19:54:48 +0800 ====================
+
+# M1 双库建库与 join 级关键查询校验
+# generated_by: scripts/ddl_verify.py
+# at: 2026-10-10 19:54:40 +0800
+
+
+--- sqlite: python -c version header ---
+$ python -c "import sqlite3;print(sqlite3.sqlite_version)"
+sqlite3 3.43.1
+[exit code: 0]
+
+--- sqlite: create_all (SQLAlchemy M1 models) ---
+# created tables = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# expected = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# inspect() sees = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+
+--- sqlite: join-level key query (products x listings x listing_versions x tasks) ---
+# SQL: SELECT count(*) AS listing_rows, sum(json_array_length(JSON_EXTRACT(listing_versions.payload, '$."langs"'))) AS langs_total  FROM listing_versions JOIN listings ON listings.id = listing_versions.listing_id JOIN products ON products.id = listings.product_id JOIN tasks ON tasks.id = listing_versions.created_by_task  WHERE tasks.status = 'succeeded'
+# RESULT listing_rows=1 langs_total=3
+
+--- pg: start throwaway container ---
+$ docker run -d --name shopkeeper-m1-ddlverify -p 127.0.0.1:15432:5432 docker.m.daocloud.io/library/postgres:15
+869d1e6166e322ecf539ae8c78e807b95a98a68c509c2a16f5b63c77b7f08946
+[exit code: 0]
+$ psql -c 'CREATE DATABASE m1_verify'
+CREATE DATABASE
+[exit code: 0]
+$ psql -c 'SELECT version()'
+                                                       version                                                        
+----------------------------------------------------------------------------------------------------------------------
+ PostgreSQL 15.19 (Debian 15.19-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+(1 row)
+[exit code: 0]
+# 来源文件: docs\ddl-verify\ddl.sql
+# CREATE TABLE 语句数 = 43
+
+--- pg: full frozen DDL (docs/ddl-verify/ddl.sql, 43 tables) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 555 lines)
+
+[exit code: 0]
+
+--- pg: table count after full DDL ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+   k    | v  
+--------+----
+ tables | 43
+(1 row)
+[exit code: 0]
+
+--- pg: R8 key query (orders x ledger_entries) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+       t        | count 
+----------------+-------
+ orders         |     0
+ ledger_entries |     0
+(2 rows)
+[exit code: 0]
+
+--- pg: SQLAlchemy M1 models -> PG DDL (dialect-compiled) ---
+# M1 模型编译出 6 张表；先建到 schema m1_orm 以隔离全量 DDL
+
+--- pg: create m1_orm schema ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+
+[exit code: 0]
+
+--- pg: create M1 ORM tables on PostgreSQL ---
+# psql -v ON_ERROR_STOP=1 (stdin, 94 lines)
+NOTICE:  extension "btree_gist" already exists, skipping
+[exit code: 0]
+
+--- pg: insert M1 fixture rows ---
+# psql -v ON_ERROR_STOP=1 (stdin, 6 lines)
+
+[exit code: 0]
+
+--- pg: join-level key query (listing_versions x listings x products x tasks) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 2 lines)
+ listing_rows | langs_total 
+--------------+-------------
+            1 |           3
+(1 row)
+[exit code: 0]
+
+--- pg: M1 table row counts ---
+# psql -v ON_ERROR_STOP=1 (stdin, 2 lines)
+        t         | count 
+------------------+-------
+ shops            |     1
+ products         |     1
+ tasks            |     1
+ listings         |     1
+ listing_versions |     1
+ tool_calls       |     0
+(6 rows)
+[exit code: 0]
+
+--- pg: teardown ---
+$ docker rm -f shopkeeper-m1-ddlverify
+shopkeeper-m1-ddlverify
+[exit code: 0]
+
+--- evidence scope (three-column discipline) ---
+# 已验证: 本次运行内 SQLite 与 PostgreSQL15 均真实建库；join 级关键查询在两库返回同形态结果；冻结 43 表 DDL 在 PG 上 ON_ERROR_STOP=1 执行完毕且表数=43。
+# 刻意未验: PG 侧 SQLAlchemy 表建在独立 schema m1_orm，未验证与 43 表全量 schema 的共存合并（M2 落全量模型时再验）；SQLite 侧不验证 PG 专有约束（btree_gist EXCLUDE、TIMESTAMPTZ 精度）；未做并发写入下的幂等键竞态压测（单测覆盖语义，不覆盖竞态窗口）。
+# 不可宣称: 本日志证明『本次能建库、查询能跑』，不证明性能与容量；也不证明 orders 等 M2 表业务语义正确（本轮只建表不写业务）。
+
+
+==================== RUN 2026-10-10 20:20:52 +0800 ====================
+
+# M1 双库建库与 join 级关键查询校验
+# generated_by: scripts/ddl_verify.py
+# at: 2026-10-10 20:20:44 +0800
+
+
+--- sqlite: python -c version header ---
+$ python -c "import sqlite3;print(sqlite3.sqlite_version)"
+sqlite3 3.43.1
+[exit code: 0]
+
+--- sqlite: create_all (SQLAlchemy M1 models) ---
+# created tables = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# expected = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# inspect() sees = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+
+--- sqlite: join-level key query (products x listings x listing_versions x tasks) ---
+# SQL: SELECT count(*) AS listing_rows, sum(json_array_length(JSON_EXTRACT(listing_versions.payload, '$."langs"'))) AS langs_total  FROM listing_versions JOIN listings ON listings.id = listing_versions.listing_id JOIN products ON products.id = listings.product_id JOIN tasks ON tasks.id = listing_versions.created_by_task  WHERE tasks.status = 'succeeded'
+# RESULT listing_rows=1 langs_total=3
+
+--- pg: start throwaway container ---
+$ docker run -d --name shopkeeper-m1-ddlverify -p 127.0.0.1:15432:5432 docker.m.daocloud.io/library/postgres:15
+e0f822f542781bd5bb5d540406570c1656559a577c06ae1d87f349b9fd53d80b
+[exit code: 0]
+$ psql -c 'CREATE DATABASE m1_verify'
+CREATE DATABASE
+[exit code: 0]
+$ psql -c 'SELECT version()'
+                                                       version                                                        
+----------------------------------------------------------------------------------------------------------------------
+ PostgreSQL 15.19 (Debian 15.19-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+(1 row)
+[exit code: 0]
+# 来源文件: docs\ddl-verify\ddl.sql
+# CREATE TABLE 语句数 = 43
+
+--- pg: full frozen DDL (docs/ddl-verify/ddl.sql, 43 tables) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 555 lines)
+
+[exit code: 0]
+
+--- pg: table count after full DDL ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+   k    | v  
+--------+----
+ tables | 43
+(1 row)
+[exit code: 0]
+
+--- pg: R8 key query (orders x ledger_entries) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+       t        | count 
+----------------+-------
+ orders         |     0
+ ledger_entries |     0
+(2 rows)
+[exit code: 0]
+
+--- pg: SQLAlchemy M1 models -> PG DDL (dialect-compiled) ---
+# M1 模型编译出 6 张表；先建到 schema m1_orm 以隔离全量 DDL
+
+--- pg: create m1_orm schema ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+
+[exit code: 0]
+
+--- pg: create M1 ORM tables on PostgreSQL ---
+# psql -v ON_ERROR_STOP=1 (stdin, 94 lines)
+NOTICE:  extension "btree_gist" already exists, skipping
+[exit code: 0]
+
+--- pg: insert M1 fixture rows ---
+# psql -v ON_ERROR_STOP=1 (stdin, 6 lines)
+
+[exit code: 0]
+
+--- pg: join-level key query (listing_versions x listings x products x tasks) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 2 lines)
+ listing_rows | langs_total 
+--------------+-------------
+            1 |           3
+(1 row)
+[exit code: 0]
+
+--- pg: M1 table row counts ---
+# psql -v ON_ERROR_STOP=1 (stdin, 2 lines)
+        t         | count 
+------------------+-------
+ shops            |     1
+ products         |     1
+ tasks            |     1
+ listings         |     1
+ listing_versions |     1
+ tool_calls       |     0
+(6 rows)
+[exit code: 0]
+
+--- pg: teardown ---
+$ docker rm -f shopkeeper-m1-ddlverify
+shopkeeper-m1-ddlverify
+[exit code: 0]
+
+--- evidence scope (three-column discipline) ---
+# 已验证: 本次运行内 SQLite 与 PostgreSQL15 均真实建库；join 级关键查询在两库返回同形态结果；冻结 43 表 DDL 在 PG 上 ON_ERROR_STOP=1 执行完毕且表数=43。
+# 刻意未验: PG 侧 SQLAlchemy 表建在独立 schema m1_orm，未验证与 43 表全量 schema 的共存合并（M2 落全量模型时再验）；SQLite 侧不验证 PG 专有约束（btree_gist EXCLUDE、TIMESTAMPTZ 精度）；未做并发写入下的幂等键竞态压测（单测覆盖语义，不覆盖竞态窗口）。
+# 不可宣称: 本日志证明『本次能建库、查询能跑』，不证明性能与容量；也不证明 orders 等 M2 表业务语义正确（本轮只建表不写业务）。
+
+
+==================== RUN 2026-10-10 21:24:28 +0800 ====================
+
+# M1 双库建库与 join 级关键查询校验
+# generated_by: scripts/ddl_verify.py
+# at: 2026-10-10 21:24:19 +0800
+
+
+--- sqlite: python -c version header ---
+$ python -c "import sqlite3;print(sqlite3.sqlite_version)"
+sqlite3 3.43.1
+[exit code: 0]
+
+--- sqlite: create_all (SQLAlchemy M1 models) ---
+# created tables = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# expected = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# inspect() sees = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+
+--- sqlite: join-level key query (products x listings x listing_versions x tasks) ---
+# SQL: SELECT count(*) AS listing_rows, sum(json_array_length(JSON_EXTRACT(listing_versions.payload, '$."langs"'))) AS langs_total  FROM listing_versions JOIN listings ON listings.id = listing_versions.listing_id JOIN products ON products.id = listings.product_id JOIN tasks ON tasks.id = listing_versions.created_by_task  WHERE tasks.status = 'succeeded'
+# RESULT listing_rows=1 langs_total=3
+
+--- pg: start throwaway container ---
+$ docker run -d --name shopkeeper-m1-ddlverify -p 127.0.0.1:15432:5432 docker.m.daocloud.io/library/postgres:15
+351980bc1f4ab9fc253f97eba3c6dcb4e0a9908a21111defc9b3ed773f54585e
+[exit code: 0]
+$ psql -c 'CREATE DATABASE m1_verify'
+CREATE DATABASE
+[exit code: 0]
+$ psql -c 'SELECT version()'
+                                                       version                                                        
+----------------------------------------------------------------------------------------------------------------------
+ PostgreSQL 15.19 (Debian 15.19-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+(1 row)
+[exit code: 0]
+# 来源文件: docs\ddl-verify\ddl.sql
+# CREATE TABLE 语句数 = 43
+
+--- pg: full frozen DDL (docs/ddl-verify/ddl.sql, 43 tables) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 555 lines)
+
+[exit code: 0]
+
+--- pg: table count after full DDL ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+   k    | v  
+--------+----
+ tables | 43
+(1 row)
+[exit code: 0]
+
+--- pg: R8 key query (orders x ledger_entries) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+       t        | count 
+----------------+-------
+ orders         |     0
+ ledger_entries |     0
+(2 rows)
+[exit code: 0]
+
+--- pg: SQLAlchemy M1 models -> PG DDL (dialect-compiled) ---
+# M1 模型编译出 6 张表；先建到 schema m1_orm 以隔离全量 DDL
+
+--- pg: create m1_orm schema ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+
+[exit code: 0]
+
+--- pg: create M1 ORM tables on PostgreSQL ---
+# psql -v ON_ERROR_STOP=1 (stdin, 94 lines)
+NOTICE:  extension "btree_gist" already exists, skipping
+[exit code: 0]
+
+--- pg: insert M1 fixture rows ---
+# psql -v ON_ERROR_STOP=1 (stdin, 6 lines)
+
+[exit code: 0]
+
+--- pg: join-level key query (listing_versions x listings x products x tasks) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 2 lines)
+ listing_rows | langs_total 
+--------------+-------------
+            1 |           3
+(1 row)
+[exit code: 0]
+
+--- pg: M1 table row counts ---
+# psql -v ON_ERROR_STOP=1 (stdin, 2 lines)
+        t         | count 
+------------------+-------
+ shops            |     1
+ products         |     1
+ tasks            |     1
+ listings         |     1
+ listing_versions |     1
+ tool_calls       |     0
+(6 rows)
+[exit code: 0]
+
+--- pg: teardown ---
+$ docker rm -f shopkeeper-m1-ddlverify
+shopkeeper-m1-ddlverify
+[exit code: 0]
+
+--- evidence scope (three-column discipline) ---
+# 已验证: 本次运行内 SQLite 与 PostgreSQL15 均真实建库；join 级关键查询在两库返回同形态结果；冻结 43 表 DDL 在 PG 上 ON_ERROR_STOP=1 执行完毕且表数=43。
+# 刻意未验: PG 侧 SQLAlchemy 表建在独立 schema m1_orm，未验证与 43 表全量 schema 的共存合并（M2 落全量模型时再验）；SQLite 侧不验证 PG 专有约束（btree_gist EXCLUDE、TIMESTAMPTZ 精度）；未做并发写入下的幂等键竞态压测（单测覆盖语义，不覆盖竞态窗口）。
+# 不可宣称: 本日志证明『本次能建库、查询能跑』，不证明性能与容量；也不证明 orders 等 M2 表业务语义正确（本轮只建表不写业务）。
+
+
+==================== RUN 2026-10-10 21:26:08 +0800 ====================
+
+# M1 双库建库与 join 级关键查询校验
+# generated_by: scripts/ddl_verify.py
+# at: 2026-10-10 21:26:00 +0800
+
+
+--- sqlite: python -c version header ---
+$ python -c "import sqlite3;print(sqlite3.sqlite_version)"
+sqlite3 3.43.1
+[exit code: 0]
+
+--- sqlite: create_all (SQLAlchemy M1 models) ---
+# created tables = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# expected = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# inspect() sees = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+
+--- sqlite: join-level key query (products x listings x listing_versions x tasks) ---
+# SQL: SELECT count(*) AS listing_rows, sum(json_array_length(JSON_EXTRACT(listing_versions.payload, '$."langs"'))) AS langs_total  FROM listing_versions JOIN listings ON listings.id = listing_versions.listing_id JOIN products ON products.id = listings.product_id JOIN tasks ON tasks.id = listing_versions.created_by_task  WHERE tasks.status = 'succeeded'
+# RESULT listing_rows=1 langs_total=3
+
+--- pg: start throwaway container ---
+$ docker run -d --name shopkeeper-m1-ddlverify -p 127.0.0.1:15432:5432 docker.m.daocloud.io/library/postgres:15
+b9af9bc7e654e281ddf95f25096e5eaf7de2dc6f4221b518e80d88c5777b4bda
+[exit code: 0]
+$ psql -c 'CREATE DATABASE m1_verify'
+CREATE DATABASE
+[exit code: 0]
+$ psql -c 'SELECT version()'
+                                                       version                                                        
+----------------------------------------------------------------------------------------------------------------------
+ PostgreSQL 15.19 (Debian 15.19-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+(1 row)
+[exit code: 0]
+# 来源文件: docs\ddl-verify\ddl.sql
+# CREATE TABLE 语句数 = 43
+
+--- pg: full frozen DDL (docs/ddl-verify/ddl.sql, 43 tables) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 555 lines)
+
+[exit code: 0]
+
+--- pg: table count after full DDL ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+   k    | v  
+--------+----
+ tables | 43
+(1 row)
+[exit code: 0]
+
+--- pg: R8 key query (orders x ledger_entries) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+       t        | count 
+----------------+-------
+ orders         |     0
+ ledger_entries |     0
+(2 rows)
+[exit code: 0]
+
+--- pg: SQLAlchemy M1 models -> PG DDL (dialect-compiled) ---
+# M1 模型编译出 6 张表；先建到 schema m1_orm 以隔离全量 DDL
+
+--- pg: create m1_orm schema ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+
+[exit code: 0]
+
+--- pg: create M1 ORM tables on PostgreSQL ---
+# psql -v ON_ERROR_STOP=1 (stdin, 94 lines)
+NOTICE:  extension "btree_gist" already exists, skipping
+[exit code: 0]
+
+--- pg: insert M1 fixture rows ---
+# psql -v ON_ERROR_STOP=1 (stdin, 6 lines)
+
+[exit code: 0]
+
+--- pg: join-level key query (listing_versions x listings x products x tasks) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 2 lines)
+ listing_rows | langs_total 
+--------------+-------------
+            1 |           3
+(1 row)
+[exit code: 0]
+
+--- pg: M1 table row counts ---
+# psql -v ON_ERROR_STOP=1 (stdin, 2 lines)
+        t         | count 
+------------------+-------
+ shops            |     1
+ products         |     1
+ tasks            |     1
+ listings         |     1
+ listing_versions |     1
+ tool_calls       |     0
+(6 rows)
+[exit code: 0]
+
+--- pg: teardown ---
+$ docker rm -f shopkeeper-m1-ddlverify
+shopkeeper-m1-ddlverify
+[exit code: 0]
+
+--- evidence scope (three-column discipline) ---
+# 已验证: 本次运行内 SQLite 与 PostgreSQL15 均真实建库；join 级关键查询在两库返回同形态结果；冻结 43 表 DDL 在 PG 上 ON_ERROR_STOP=1 执行完毕且表数=43。
+# 刻意未验: PG 侧 SQLAlchemy 表建在独立 schema m1_orm，未验证与 43 表全量 schema 的共存合并（M2 落全量模型时再验）；SQLite 侧不验证 PG 专有约束（btree_gist EXCLUDE、TIMESTAMPTZ 精度）；未做并发写入下的幂等键竞态压测（单测覆盖语义，不覆盖竞态窗口）。
+# 不可宣称: 本日志证明『本次能建库、查询能跑』，不证明性能与容量；也不证明 orders 等 M2 表业务语义正确（本轮只建表不写业务）。
+
+
+==================== RUN 2026-10-10 22:35:47 +0800 ====================
+
+# M1 双库建库与 join 级关键查询校验
+# generated_by: scripts/ddl_verify.py
+# at: 2026-10-10 22:35:38 +0800
+
+
+--- sqlite: python -c version header ---
+$ python -c "import sqlite3;print(sqlite3.sqlite_version)"
+sqlite3 3.43.1
+[exit code: 0]
+
+--- sqlite: create_all (SQLAlchemy M1 models) ---
+# created tables = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# expected = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# inspect() sees = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+
+--- sqlite: join-level key query (products x listings x listing_versions x tasks) ---
+# SQL: SELECT count(*) AS listing_rows, sum(json_array_length(JSON_EXTRACT(listing_versions.payload, '$."langs"'))) AS langs_total  FROM listing_versions JOIN listings ON listings.id = listing_versions.listing_id JOIN products ON products.id = listings.product_id JOIN tasks ON tasks.id = listing_versions.created_by_task  WHERE tasks.status = 'succeeded'
+# RESULT listing_rows=1 langs_total=3
+
+--- pg: start throwaway container ---
+$ docker run -d --name shopkeeper-m1-ddlverify -p 127.0.0.1:15432:5432 docker.m.daocloud.io/library/postgres:15
+a5f3056db7bb7bb34859c7843e3cf05b13c7d6a1bfb7387fc02e49b51de63bc1
+[exit code: 0]
+$ psql -c 'CREATE DATABASE m1_verify'
+CREATE DATABASE
+[exit code: 0]
+$ psql -c 'SELECT version()'
+                                                       version                                                        
+----------------------------------------------------------------------------------------------------------------------
+ PostgreSQL 15.19 (Debian 15.19-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+(1 row)
+[exit code: 0]
+# 来源文件: docs\ddl-verify\ddl.sql
+# CREATE TABLE 语句数 = 43
+
+--- pg: full frozen DDL (docs/ddl-verify/ddl.sql, 43 tables) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 555 lines)
+
+[exit code: 0]
+
+--- pg: table count after full DDL ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+   k    | v  
+--------+----
+ tables | 43
+(1 row)
+[exit code: 0]
+
+--- pg: R8 key query (orders x ledger_entries) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+       t        | count 
+----------------+-------
+ orders         |     0
+ ledger_entries |     0
+(2 rows)
+[exit code: 0]
+
+--- pg: SQLAlchemy M1 models -> PG DDL (dialect-compiled) ---
+# M1 模型编译出 6 张表；先建到 schema m1_orm 以隔离全量 DDL
+
+--- pg: create m1_orm schema ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+
+[exit code: 0]
+
+--- pg: create M1 ORM tables on PostgreSQL ---
+# psql -v ON_ERROR_STOP=1 (stdin, 94 lines)
+NOTICE:  extension "btree_gist" already exists, skipping
+[exit code: 0]
+
+--- pg: insert M1 fixture rows ---
+# psql -v ON_ERROR_STOP=1 (stdin, 6 lines)
+
+[exit code: 0]
+
+--- pg: join-level key query (listing_versions x listings x products x tasks) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 2 lines)
+ listing_rows | langs_total 
+--------------+-------------
+            1 |           3
+(1 row)
+[exit code: 0]
+
+--- pg: M1 table row counts ---
+# psql -v ON_ERROR_STOP=1 (stdin, 2 lines)
+        t         | count 
+------------------+-------
+ shops            |     1
+ products         |     1
+ tasks            |     1
+ listings         |     1
+ listing_versions |     1
+ tool_calls       |     0
+(6 rows)
+[exit code: 0]
+
+--- pg: teardown ---
+$ docker rm -f shopkeeper-m1-ddlverify
+shopkeeper-m1-ddlverify
+[exit code: 0]
+
+--- evidence scope (three-column discipline) ---
+# 已验证: 本次运行内 SQLite 与 PostgreSQL15 均真实建库；join 级关键查询在两库返回同形态结果；冻结 43 表 DDL 在 PG 上 ON_ERROR_STOP=1 执行完毕且表数=43。
+# 刻意未验: PG 侧 SQLAlchemy 表建在独立 schema m1_orm，未验证与 43 表全量 schema 的共存合并（M2 落全量模型时再验）；SQLite 侧不验证 PG 专有约束（btree_gist EXCLUDE、TIMESTAMPTZ 精度）；未做并发写入下的幂等键竞态压测（单测覆盖语义，不覆盖竞态窗口）。
+# 不可宣称: 本日志证明『本次能建库、查询能跑』，不证明性能与容量；也不证明 orders 等 M2 表业务语义正确（本轮只建表不写业务）。
+
+
+==================== RUN 2026-10-10 22:55:05 +0800 ====================
+
+# M1 双库建库与 join 级关键查询校验
+# generated_by: scripts/ddl_verify.py
+# at: 2026-10-10 22:54:57 +0800
+
+
+--- sqlite: python -c version header ---
+$ python -c "import sqlite3;print(sqlite3.sqlite_version)"
+sqlite3 3.43.1
+[exit code: 0]
+
+--- sqlite: create_all (SQLAlchemy M1 models) ---
+# created tables = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# expected = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# inspect() sees = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+
+--- sqlite: join-level key query (products x listings x listing_versions x tasks) ---
+# SQL: SELECT count(*) AS listing_rows, sum(json_array_length(JSON_EXTRACT(listing_versions.payload, '$."langs"'))) AS langs_total  FROM listing_versions JOIN listings ON listings.id = listing_versions.listing_id JOIN products ON products.id = listings.product_id JOIN tasks ON tasks.id = listing_versions.created_by_task  WHERE tasks.status = 'succeeded'
+# RESULT listing_rows=1 langs_total=3
+
+--- pg: start throwaway container ---
+$ docker run -d --name shopkeeper-m1-ddlverify -p 127.0.0.1:15432:5432 docker.m.daocloud.io/library/postgres:15
+7367c6f6c60249cbab63fc2f18a3efba02d089d565667cf73edd7294b1ecea82
+[exit code: 0]
+$ psql -c 'CREATE DATABASE m1_verify'
+CREATE DATABASE
+[exit code: 0]
+$ psql -c 'SELECT version()'
+                                                       version                                                        
+----------------------------------------------------------------------------------------------------------------------
+ PostgreSQL 15.19 (Debian 15.19-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+(1 row)
+[exit code: 0]
+# 来源文件: docs\ddl-verify\ddl.sql
+# CREATE TABLE 语句数 = 43
+
+--- pg: full frozen DDL (docs/ddl-verify/ddl.sql, 43 tables) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 555 lines)
+
+[exit code: 0]
+
+--- pg: table count after full DDL ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+   k    | v  
+--------+----
+ tables | 43
+(1 row)
+[exit code: 0]
+
+--- pg: R8 key query (orders x ledger_entries) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+       t        | count 
+----------------+-------
+ orders         |     0
+ ledger_entries |     0
+(2 rows)
+[exit code: 0]
+
+--- pg: SQLAlchemy M1 models -> PG DDL (dialect-compiled) ---
+# M1 模型编译出 6 张表；先建到 schema m1_orm 以隔离全量 DDL
+
+--- pg: create m1_orm schema ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+
+[exit code: 0]
+
+--- pg: create M1 ORM tables on PostgreSQL ---
+# psql -v ON_ERROR_STOP=1 (stdin, 94 lines)
+NOTICE:  extension "btree_gist" already exists, skipping
+[exit code: 0]
+
+--- pg: insert M1 fixture rows ---
+# psql -v ON_ERROR_STOP=1 (stdin, 6 lines)
+
+[exit code: 0]
+
+--- pg: join-level key query (listing_versions x listings x products x tasks) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 2 lines)
+ listing_rows | langs_total 
+--------------+-------------
+            1 |           3
+(1 row)
+[exit code: 0]
+
+--- pg: M1 table row counts ---
+# psql -v ON_ERROR_STOP=1 (stdin, 2 lines)
+        t         | count 
+------------------+-------
+ shops            |     1
+ products         |     1
+ tasks            |     1
+ listings         |     1
+ listing_versions |     1
+ tool_calls       |     0
+(6 rows)
+[exit code: 0]
+
+--- pg: teardown ---
+$ docker rm -f shopkeeper-m1-ddlverify
+shopkeeper-m1-ddlverify
+[exit code: 0]
+
+--- evidence scope (three-column discipline) ---
+# 已验证: 本次运行内 SQLite 与 PostgreSQL15 均真实建库；join 级关键查询在两库返回同形态结果；冻结 43 表 DDL 在 PG 上 ON_ERROR_STOP=1 执行完毕且表数=43。
+# 刻意未验: PG 侧 SQLAlchemy 表建在独立 schema m1_orm，未验证与 43 表全量 schema 的共存合并（M2 落全量模型时再验）；SQLite 侧不验证 PG 专有约束（btree_gist EXCLUDE、TIMESTAMPTZ 精度）；未做并发写入下的幂等键竞态压测（单测覆盖语义，不覆盖竞态窗口）。
+# 不可宣称: 本日志证明『本次能建库、查询能跑』，不证明性能与容量；也不证明 orders 等 M2 表业务语义正确（本轮只建表不写业务）。
+
+
+==================== RUN 2026-10-10 23:22:32 +0800 ====================
+
+# M1 双库建库与 join 级关键查询校验
+# generated_by: scripts/ddl_verify.py
+# at: 2026-10-10 23:22:24 +0800
+
+
+--- sqlite: python -c version header ---
+$ python -c "import sqlite3;print(sqlite3.sqlite_version)"
+sqlite3 3.43.1
+[exit code: 0]
+
+--- sqlite: create_all (SQLAlchemy M1 models) ---
+# created tables = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# expected = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# inspect() sees = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+
+--- sqlite: join-level key query (products x listings x listing_versions x tasks) ---
+# SQL: SELECT count(*) AS listing_rows, sum(json_array_length(JSON_EXTRACT(listing_versions.payload, '$."langs"'))) AS langs_total  FROM listing_versions JOIN listings ON listings.id = listing_versions.listing_id JOIN products ON products.id = listings.product_id JOIN tasks ON tasks.id = listing_versions.created_by_task  WHERE tasks.status = 'succeeded'
+# RESULT listing_rows=1 langs_total=3
+
+--- pg: start throwaway container ---
+$ docker run -d --name shopkeeper-m1-ddlverify -p 127.0.0.1:15432:5432 docker.m.daocloud.io/library/postgres:15
+b76210d54762d53097457b4324a93363c8f207e0370ac4e81946162c364b27b6
+[exit code: 0]
+$ psql -c 'CREATE DATABASE m1_verify'
+CREATE DATABASE
+[exit code: 0]
+$ psql -c 'SELECT version()'
+                                                       version                                                        
+----------------------------------------------------------------------------------------------------------------------
+ PostgreSQL 15.19 (Debian 15.19-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+(1 row)
+[exit code: 0]
+# 来源文件: docs\ddl-verify\ddl.sql
+# CREATE TABLE 语句数 = 43
+
+--- pg: full frozen DDL (docs/ddl-verify/ddl.sql, 43 tables) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 555 lines)
+
+[exit code: 0]
+
+--- pg: table count after full DDL ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+   k    | v  
+--------+----
+ tables | 43
+(1 row)
+[exit code: 0]
+
+--- pg: R8 key query (orders x ledger_entries) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+       t        | count 
+----------------+-------
+ orders         |     0
+ ledger_entries |     0
+(2 rows)
+[exit code: 0]
+
+--- pg: SQLAlchemy M1 models -> PG DDL (dialect-compiled) ---
+# M1 模型编译出 6 张表；先建到 schema m1_orm 以隔离全量 DDL
+
+--- pg: create m1_orm schema ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+
+[exit code: 0]
+
+--- pg: create M1 ORM tables on PostgreSQL ---
+# psql -v ON_ERROR_STOP=1 (stdin, 94 lines)
+NOTICE:  extension "btree_gist" already exists, skipping
+[exit code: 0]
+
+--- pg: insert M1 fixture rows ---
+# psql -v ON_ERROR_STOP=1 (stdin, 6 lines)
+
+[exit code: 0]
+
+--- pg: join-level key query (listing_versions x listings x products x tasks) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 2 lines)
+ listing_rows | langs_total 
+--------------+-------------
+            1 |           3
+(1 row)
+[exit code: 0]
+
+--- pg: M1 table row counts ---
+# psql -v ON_ERROR_STOP=1 (stdin, 2 lines)
+        t         | count 
+------------------+-------
+ shops            |     1
+ products         |     1
+ tasks            |     1
+ listings         |     1
+ listing_versions |     1
+ tool_calls       |     0
+(6 rows)
+[exit code: 0]
+
+--- pg: teardown ---
+$ docker rm -f shopkeeper-m1-ddlverify
+shopkeeper-m1-ddlverify
+[exit code: 0]
+
+--- evidence scope (three-column discipline) ---
+# 已验证: 本次运行内 SQLite 与 PostgreSQL15 均真实建库；join 级关键查询在两库返回同形态结果；冻结 43 表 DDL 在 PG 上 ON_ERROR_STOP=1 执行完毕且表数=43。
+# 刻意未验: PG 侧 SQLAlchemy 表建在独立 schema m1_orm，未验证与 43 表全量 schema 的共存合并（M2 落全量模型时再验）；SQLite 侧不验证 PG 专有约束（btree_gist EXCLUDE、TIMESTAMPTZ 精度）；未做并发写入下的幂等键竞态压测（单测覆盖语义，不覆盖竞态窗口）。
+# 不可宣称: 本日志证明『本次能建库、查询能跑』，不证明性能与容量；也不证明 orders 等 M2 表业务语义正确（本轮只建表不写业务）。
+
+
+==================== RUN 2026-10-11 17:24:01 +0800 ====================
+
+# M1 双库建库与 join 级关键查询校验
+# generated_by: scripts/ddl_verify.py
+# at: 2026-10-11 17:23:53 +0800
+
+
+--- sqlite: python -c version header ---
+$ python -c "import sqlite3;print(sqlite3.sqlite_version)"
+sqlite3 3.43.1
+[exit code: 0]
+
+--- sqlite: create_all (SQLAlchemy M1 models) ---
+# created tables = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# expected = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# inspect() sees = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+
+--- sqlite: join-level key query (products x listings x listing_versions x tasks) ---
+# SQL: SELECT count(*) AS listing_rows, sum(json_array_length(JSON_EXTRACT(listing_versions.payload, '$."langs"'))) AS langs_total  FROM listing_versions JOIN listings ON listings.id = listing_versions.listing_id JOIN products ON products.id = listings.product_id JOIN tasks ON tasks.id = listing_versions.created_by_task  WHERE tasks.status = 'succeeded'
+# RESULT listing_rows=1 langs_total=3
+
+--- pg: start throwaway container ---
+$ docker run -d --name shopkeeper-m1-ddlverify -p 127.0.0.1:15432:5432 docker.m.daocloud.io/library/postgres:15
+e7e66d177801f29a1b209c8004cdaf7f61f2e92ff46a6ade6b3592ae5a2ef617
+[exit code: 0]
+$ psql -c 'CREATE DATABASE m1_verify'
+CREATE DATABASE
+[exit code: 0]
+$ psql -c 'SELECT version()'
+                                                       version                                                        
+----------------------------------------------------------------------------------------------------------------------
+ PostgreSQL 15.19 (Debian 15.19-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+(1 row)
+[exit code: 0]
+# 来源文件: docs\ddl-verify\ddl.sql
+# CREATE TABLE 语句数 = 43
+
+--- pg: full frozen DDL (docs/ddl-verify/ddl.sql, 43 tables) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 555 lines)
+
+[exit code: 0]
+
+--- pg: table count after full DDL ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+   k    | v  
+--------+----
+ tables | 43
+(1 row)
+[exit code: 0]
+
+--- pg: R8 key query (orders x ledger_entries) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+       t        | count 
+----------------+-------
+ orders         |     0
+ ledger_entries |     0
+(2 rows)
+[exit code: 0]
+
+--- pg: SQLAlchemy M1 models -> PG DDL (dialect-compiled) ---
+# M1 模型编译出 6 张表；先建到 schema m1_orm 以隔离全量 DDL
+
+--- pg: create m1_orm schema ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+
+[exit code: 0]
+
+--- pg: create M1 ORM tables on PostgreSQL ---
+# psql -v ON_ERROR_STOP=1 (stdin, 93 lines)
+NOTICE:  extension "btree_gist" already exists, skipping
+[exit code: 0]
+
+--- pg: insert M1 fixture rows ---
+# psql -v ON_ERROR_STOP=1 (stdin, 6 lines)
+
+[exit code: 0]
+
+--- pg: join-level key query (listing_versions x listings x products x tasks) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 2 lines)
+ listing_rows | langs_total 
+--------------+-------------
+            1 |           3
+(1 row)
+[exit code: 0]
+
+--- pg: M1 table row counts ---
+# psql -v ON_ERROR_STOP=1 (stdin, 2 lines)
+        t         | count 
+------------------+-------
+ shops            |     1
+ products         |     1
+ tasks            |     1
+ listings         |     1
+ listing_versions |     1
+ tool_calls       |     0
+(6 rows)
+[exit code: 0]
+
+--- pg: teardown ---
+$ docker rm -f shopkeeper-m1-ddlverify
+shopkeeper-m1-ddlverify
+[exit code: 0]
+
+--- evidence scope (three-column discipline) ---
+# 已验证: 本次运行内 SQLite 与 PostgreSQL15 均真实建库；join 级关键查询在两库返回同形态结果；冻结 43 表 DDL 在 PG 上 ON_ERROR_STOP=1 执行完毕且表数=43。
+# 刻意未验: PG 侧 SQLAlchemy 表建在独立 schema m1_orm，未验证与 43 表全量 schema 的共存合并（M2 落全量模型时再验）；SQLite 侧不验证 PG 专有约束（btree_gist EXCLUDE、TIMESTAMPTZ 精度）；未做并发写入下的幂等键竞态压测（单测覆盖语义，不覆盖竞态窗口）。
+# 不可宣称: 本日志证明『本次能建库、查询能跑』，不证明性能与容量；也不证明 orders 等 M2 表业务语义正确（本轮只建表不写业务）。
+
+
+==================== RUN 2026-10-11 17:27:18 +0800 ====================
+
+# M1 双库建库与 join 级关键查询校验
+# generated_by: scripts/ddl_verify.py
+# at: 2026-10-11 17:27:10 +0800
+
+
+--- sqlite: python -c version header ---
+$ python -c "import sqlite3;print(sqlite3.sqlite_version)"
+sqlite3 3.43.1
+[exit code: 0]
+
+--- sqlite: create_all (SQLAlchemy M1 models) ---
+# created tables = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# expected = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# inspect() sees = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+
+--- sqlite: join-level key query (products x listings x listing_versions x tasks) ---
+# SQL: SELECT count(*) AS listing_rows, sum(json_array_length(JSON_EXTRACT(listing_versions.payload, '$."langs"'))) AS langs_total  FROM listing_versions JOIN listings ON listings.id = listing_versions.listing_id JOIN products ON products.id = listings.product_id JOIN tasks ON tasks.id = listing_versions.created_by_task  WHERE tasks.status = 'succeeded'
+# RESULT listing_rows=1 langs_total=3
+
+--- pg: start throwaway container ---
+$ docker run -d --name shopkeeper-m1-ddlverify -p 127.0.0.1:15432:5432 docker.m.daocloud.io/library/postgres:15
+e61b185c4fbfde66df8635024e0f97d1340c97a7ec32c04c8c0a6e111ca70692
+[exit code: 0]
+$ psql -c 'CREATE DATABASE m1_verify'
+CREATE DATABASE
+[exit code: 0]
+$ psql -c 'SELECT version()'
+                                                       version                                                        
+----------------------------------------------------------------------------------------------------------------------
+ PostgreSQL 15.19 (Debian 15.19-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+(1 row)
+[exit code: 0]
+# 来源文件: docs\ddl-verify\ddl.sql
+# CREATE TABLE 语句数 = 43
+
+--- pg: full frozen DDL (docs/ddl-verify/ddl.sql, 43 tables) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 555 lines)
+
+[exit code: 0]
+
+--- pg: table count after full DDL ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+   k    | v  
+--------+----
+ tables | 43
+(1 row)
+[exit code: 0]
+
+--- pg: R8 key query (orders x ledger_entries) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+       t        | count 
+----------------+-------
+ orders         |     0
+ ledger_entries |     0
+(2 rows)
+[exit code: 0]
+
+--- pg: SQLAlchemy M1 models -> PG DDL (dialect-compiled) ---
+# M1 模型编译出 6 张表；先建到 schema m1_orm 以隔离全量 DDL
+
+--- pg: create m1_orm schema ---
+# psql -v ON_ERROR_STOP=1 (stdin, 1 lines)
+
+[exit code: 0]
+
+--- pg: create M1 ORM tables on PostgreSQL ---
+# psql -v ON_ERROR_STOP=1 (stdin, 93 lines)
+NOTICE:  extension "btree_gist" already exists, skipping
+[exit code: 0]
+
+--- pg: insert M1 fixture rows ---
+# psql -v ON_ERROR_STOP=1 (stdin, 6 lines)
+
+[exit code: 0]
+
+--- pg: join-level key query (listing_versions x listings x products x tasks) ---
+# psql -v ON_ERROR_STOP=1 (stdin, 2 lines)
+ listing_rows | langs_total 
+--------------+-------------
+            1 |           3
+(1 row)
+[exit code: 0]
+
+--- pg: M1 table row counts ---
+# psql -v ON_ERROR_STOP=1 (stdin, 2 lines)
+        t         | count 
+------------------+-------
+ shops            |     1
+ products         |     1
+ tasks            |     1
+ listings         |     1
+ listing_versions |     1
+ tool_calls       |     0
+(6 rows)
+[exit code: 0]
+
+--- pg: teardown ---
+$ docker rm -f shopkeeper-m1-ddlverify
+shopkeeper-m1-ddlverify
+[exit code: 0]
+
+--- evidence scope (three-column discipline) ---
+# 已验证: 本次运行内 SQLite 与 PostgreSQL15 均真实建库；join 级关键查询在两库返回同形态结果；冻结 43 表 DDL 在 PG 上 ON_ERROR_STOP=1 执行完毕且表数=43。
+# 刻意未验: PG 侧 SQLAlchemy 表建在独立 schema m1_orm，未验证与 43 表全量 schema 的共存合并（M2 落全量模型时再验）；SQLite 侧不验证 PG 专有约束（btree_gist EXCLUDE、TIMESTAMPTZ 精度）；未做并发写入下的幂等键竞态压测（单测覆盖语义，不覆盖竞态窗口）。
+# 不可宣称: 本日志证明『本次能建库、查询能跑』，不证明性能与容量；也不证明 orders 等 M2 表业务语义正确（本轮只建表不写业务）。
+
+
+==================== RUN 2026-10-19 00:05:21 +0800 ====================
+
+# M1 双库建库与 join 级关键查询校验
+# generated_by: scripts/ddl_verify.py
+# at: 2026-10-19 00:05:21 +0800
+
+
+--- sqlite: python -c version header ---
+$ python -c "import sqlite3;print(sqlite3.sqlite_version)"
+sqlite3 3.43.1
+[exit code: 0]
+
+--- sqlite: create_all (SQLAlchemy M1 models) ---
+# created tables = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# expected = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# inspect() sees = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+
+--- sqlite: join-level key query (products x listings x listing_versions x tasks) ---
+# SQL: SELECT count(*) AS listing_rows, sum(json_array_length(JSON_EXTRACT(listing_versions.payload, '$."langs"'))) AS langs_total  FROM listing_versions JOIN listings ON listings.id = listing_versions.listing_id JOIN products ON products.id = listings.product_id JOIN tasks ON tasks.id = listing_versions.created_by_task  WHERE tasks.status = 'succeeded'
+# RESULT listing_rows=1 langs_total=3
+# --sqlite-only：PG 侧本轮未执行，不得宣称双库通过
+
+--- evidence scope (three-column discipline) ---
+# 已验证: 本次运行仅验证 SQLite：建库 + 四表 join。PG 侧本轮未执行（--sqlite-only），**不得据此宣称双库通过**。
+# 刻意未验: PostgreSQL 全部未验证：未建库、未跑 join、未执行 43 表全量 DDL。SQLite 侧本就不验证 PG 专有约束（btree_gist EXCLUDE、TIMESTAMPTZ 精度）。未做并发写入下的幂等键竞态压测（单测覆盖语义，不覆盖竞态窗口）。
+# 不可宣称: 本轮证据只覆盖 SQLite 单库；任何'双库已验证'的说法在本日志中不成立。
+
+
+==================== RUN 2026-10-20 23:12:04 +0800 ====================
+
+# M1 双库建库与 join 级关键查询校验
+# generated_by: scripts/ddl_verify.py
+# at: 2026-10-20 23:12:03 +0800
+
+
+--- sqlite: python -c version header ---
+$ python -c "import sqlite3;print(sqlite3.sqlite_version)"
+sqlite3 3.43.1
+[exit code: 0]
+
+--- sqlite: create_all (SQLAlchemy M1 models) ---
+# created tables = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# expected = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+# inspect() sees = ['listing_versions', 'listings', 'products', 'shops', 'tasks', 'tool_calls']
+
+--- sqlite: join-level key query (products x listings x listing_versions x tasks) ---
+# SQL: SELECT count(*) AS listing_rows, sum(json_array_length(JSON_EXTRACT(listing_versions.payload, '$."langs"'))) AS langs_total  FROM listing_versions JOIN listings ON listings.id = listing_versions.listing_id JOIN products ON products.id = listings.product_id JOIN tasks ON tasks.id = listing_versions.created_by_task  WHERE tasks.status = 'succeeded'
+# RESULT listing_rows=1 langs_total=3
+# --sqlite-only：PG 侧本轮未执行，不得宣称双库通过
+
+--- evidence scope (three-column discipline) ---
+# 已验证: 本次运行仅验证 SQLite：建库 + 四表 join。PG 侧本轮未执行（--sqlite-only），**不得据此宣称双库通过**。
+# 刻意未验: PostgreSQL 全部未验证：未建库、未跑 join、未执行 43 表全量 DDL。SQLite 侧本就不验证 PG 专有约束（btree_gist EXCLUDE、TIMESTAMPTZ 精度）。未做并发写入下的幂等键竞态压测（单测覆盖语义，不覆盖竞态窗口）。
+# 不可宣称: 本轮证据只覆盖 SQLite 单库；任何'双库已验证'的说法在本日志中不成立。

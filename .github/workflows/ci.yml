@@ -1,0 +1,248 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    name: pytest (not real)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          # apps/admin 有 package-lock.json；缓存 ~/.npm 让 `npm ci` 不必每次重下。
+          cache: npm
+          cache-dependency-path: apps/admin/package-lock.json
+
+      - name: Install the package and dev extras
+        run: python -m pip install -e ".[dev]"
+
+      - name: Build admin frontend (no CDN)
+        working-directory: apps/admin
+        run: npm ci && npm run build && npm test
+
+      # dist 已入库（FastAPI 直接伺服 src/shopkeeper/admin/dist）。改了 apps/admin/src
+      # 却忘记重新 build 并提交 dist 时，服务端会继续伺服旧前端，而此前没有任何检查
+      # 会发现。上一步刚 build 过，这里断言产物与入库内容一致。
+      - name: Verify committed admin dist matches source
+        run: |
+          if ! git diff --exit-code -- src/shopkeeper/admin/dist; then
+            echo "::error::src/shopkeeper/admin/dist 与 apps/admin/src 不一致。"
+            echo "请在 apps/admin 下运行 npm run build 并提交产物。"
+            exit 1
+          fi
+          untracked=$(git ls-files --others --exclude-standard -- src/shopkeeper/admin/dist)
+          if [ -n "$untracked" ]; then
+            echo "::error::dist 下有未入库的新产物："
+            echo "$untracked"
+            exit 1
+          fi
+          echo "admin dist 与源码一致。"
+
+      # Chromium 下载约 100+MB，是这两个 job 里最贵的一步。按 Playwright 版本做 key，
+      # 升级 playwright 时自动失效。
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}
+
+      - name: Install Playwright Chromium
+        run: python -m playwright install --with-deps chromium
+
+      # tests/workflow/test_seller_e2e.py 没有 real 标记，会随这条命令一起跑。
+      # P1-09：部署产物静态校验 + 一次真探活。
+      # 覆盖：端口在三个部署文件间自洽、环境变量名拼错（静默失效）、
+      # 写通道默认关、只绑回环、非 root、healthcheck、DB 落挂载卷。
+      # **不覆盖** `docker build`（runner 上不做构建，保持这一步秒级）。
+      #
+      # 注意：**加 step 而不是加 job** —— 分支保护依赖三个 job 的显示名，
+      # 改 job 列表会动到受保护配置。
+      - name: Deploy artifacts check
+        run: python scripts/check_deploy.py
+
+      - name: Run the offline test suite
+        env:
+          PYTHONPATH: src
+        run: python -m pytest -m "not real"
+
+  # 中文 Windows（GBK）实测：subprocess 默认解码会炸。本 job 关 PYTHONUTF8，
+  # 逼默认编码走系统 ANSI，抓「未显式 encoding=utf-8」的回归。
+  pytest-windows:
+    name: pytest (not real, windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          # apps/admin 有 package-lock.json；缓存 ~/.npm 让 `npm ci` 不必每次重下。
+          cache: npm
+          cache-dependency-path: apps/admin/package-lock.json
+
+      - name: Install the package and dev extras
+        run: python -m pip install -e ".[dev]"
+
+      - name: Build admin frontend (no CDN)
+        working-directory: apps/admin
+        run: npm ci && npm run build && npm test
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/AppData/Local/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}
+
+      - name: Install Playwright Chromium
+        run: python -m playwright install chromium
+
+      - name: Run the offline test suite without forced UTF-8 mode
+        env:
+          PYTHONPATH: src
+          PYTHONUTF8: "0"
+        run: python -m pytest -m "not real"
+
+      # 中文 Windows 一键安装：幂等建 .venv / .env，默认 WORKFLOW_PORT=8010，探活 /healthz。
+      # 不改 TTS_WRITE_ENABLED；不打开浏览器。
+      - name: Windows one-click install and /healthz
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # Scripts are UTF-8 with BOM for Windows PowerShell 5.1; prefer pwsh in CI.
+          & pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/windows/install.ps1 -NonInteractive
+          if ($LASTEXITCODE -ne 0) { throw "install.ps1 failed exit=$LASTEXITCODE" }
+          $envPath = Join-Path $pwd '.env'
+          if (-not (Test-Path -LiteralPath $envPath)) { throw '.env missing after install.ps1' }
+          $tts = (Select-String -Path $envPath -Pattern '^\s*TTS_WRITE_ENABLED\s*=\s*(.+)$' | Select-Object -First 1)
+          if (-not $tts -or $tts.Matches[0].Groups[1].Value.Trim() -ne '0') {
+            throw 'TTS_WRITE_ENABLED must remain 0 after install.ps1'
+          }
+          $port = 8010
+          $m = Select-String -Path $envPath -Pattern '^\s*WORKFLOW_PORT\s*=\s*(\d+)' | Select-Object -First 1
+          if ($m) { $port = [int]$m.Matches[0].Groups[1].Value }
+          $py = Join-Path $pwd '.venv\Scripts\python.exe'
+          if (-not (Test-Path -LiteralPath $py)) { throw '.venv python missing after install.ps1' }
+          $env:PYTHONPATH = (Join-Path $pwd 'src')
+          $env:WORKFLOW_PORT = "$port"
+          $env:WORKFLOW_SCHEDULER = '0'
+          $proc = Start-Process -FilePath $py -ArgumentList @('-m', 'shopkeeper.workflow.serve') -WorkingDirectory $pwd -PassThru -NoNewWindow
+          try {
+            $ok = $false
+            $body = ''
+            foreach ($i in 1..90) {
+              Start-Sleep -Seconds 1
+              if ($proc.HasExited) { throw "serve exited early code=$($proc.ExitCode)" }
+              try {
+                $r = Invoke-WebRequest -Uri "http://127.0.0.1:$port/healthz" -UseBasicParsing -TimeoutSec 2
+                if ($r.StatusCode -eq 200 -and $r.Content -match '"ok"') {
+                  $ok = $true
+                  $body = $r.Content
+                  break
+                }
+              } catch { }
+            }
+            if (-not $ok) { throw "healthz not ready on port $port" }
+            Write-Host "healthz ok port=$port body=$body"
+          } finally {
+            if ($proc -and -not $proc.HasExited) {
+              Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            }
+          }
+
+  # Tauri 壳：只校验脚手架配置，不 cargo/tauri build（避免 CI 超时）。
+  # 完整编译留给开发者本机；若日后加编译 job，须缓存且保持可选。
+  desktop-scaffold:
+    name: desktop scaffold (no rustc)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check apps/desktop Tauri scaffold
+        run: python scripts/check_desktop_scaffold.py
+
+  # P3-01：Tauri 真编译。
+  #
+  # 为什么单列一个 job 而**不并进上面那个**：`desktop scaffold (no rustc)` 是分支保护
+  # 依赖的必需检查，跑得快且零依赖；真编译要装 Rust 工具链、首次约 5-10 分钟。
+  # 混在一起会让每个 PR 都变慢，且一旦 Rust 侧抖动就会把必需检查打红。
+  #
+  # 也**不加进分支保护的必需列表** —— 它依赖网络下载 crate，抖动概率明显高于纯 Python 检查。
+  # 它存在的意义是：把「静态脚手架绿、真编译红」这个盲区显式暴露出来（见 #69 的教训）。
+  desktop-compile:
+    name: desktop compile (rustc)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Tauri 2 在 Linux 上需要 WebKitGTK 等系统库才能通过 check。
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev patchelf
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      - name: cargo check
+        working-directory: apps/desktop/src-tauri
+        run: cargo check --locked
+
+  # P1-05：git 全历史密钥扫描。
+  #
+  # 不放进上面三个必需检查（pytest / pytest-windows / desktop-scaffold）。
+  # 2026-10-14 的实现大约 81s，塞进必需 job 会拖慢每个 PR。
+  # 现用 git cat-file --batch（2026-10-17 本机 1822 个 blob/commit，1.31s）。
+  # 仍单独成 job，并给 job 3 分钟、扫描步骤 2 分钟的硬超时。
+  # checkout 必须 fetch-depth: 0，浅克隆只扫得到 tip。
+  # 显示名是 secret scan (history)，不改那三个必需检查的名字。
+  # 未放行的命中让本 job 失败，所以这里不用 continue-on-error。
+  secret-scan-history:
+    name: secret scan (history)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Scan full git history
+        timeout-minutes: 2
+        run: python scripts/scan_history.py
+

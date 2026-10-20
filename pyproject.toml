@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shopkeeper"
+version = "0.1.0"
+description = "AI 店长：TikTok Shop 无货源店铺 AI 员工舰队（M1 骨架）"
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = [
+  "pydantic>=2.8",
+  "pydantic-settings>=2.3",
+  "SQLAlchemy>=2.0",
+  "httpx>=0.27",
+  "requests>=2.31",          # pillow_image 下载源图用；之前只被 import 却没声明
+  "cryptography>=42.0",      # security/crypto.py 用；且被 db.repo 的核心写入链 import，
+                             # 不声明的话干净安装会在 import shopkeeper.db 时就炸
+  "fastapi>=0.110",
+  "uvicorn>=0.30",
+  "Pillow>=10.0",
+  "lxml>=5.0",
+  "beautifulsoup4>=4.12",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "playwright>=1.40"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+shopkeeper = ["assets/fonts/*", "assets/compliance_lexicon.json", "admin/dist/*", "admin/dist/assets/*"]
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q --strict-markers"
+markers = [
+  "contract: 适配器契约测试（对每个实现跑同一套断言）",
+  "real: 需要外部凭据或网络的真实调用测试（默认 deselect）",
+  "browser: 需要 playwright chromium 的浏览器冒烟",
+]
