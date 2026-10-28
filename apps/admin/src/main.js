@@ -1,4 +1,6 @@
 import "./styles.css";
+import "./operations.css";
+import { OperationsWorkbench, OPERATIONS_ROUTES } from "./operations-workbench.js";
 import { api, login, logout, me } from "./api.js";
 import { OrderWorkbench } from "./order-workbench.js";
 
@@ -39,10 +41,11 @@ const ICONS = {
 };
 
 const NAV_GROUPS = [
+  { label: "日常运营", items: Object.entries(OPERATIONS_ROUTES).map(([id,label]) => ({id,label})) },
   {
-    label: "运营",
+    label: "AI 与系统工具",
     items: [
-      { id: "overview", label: "总览" },
+      { id: "overview", label: "系统诊断" },
       { id: "workflows", label: "AI 工作流" },
       { id: "runs", label: "编排运行" },
       { id: "agents", label: "AI 代理" },
@@ -71,7 +74,7 @@ const state = {
   user: null,
   status: null,
   shop: null,
-  route: "overview",
+  route: "operations",
   approvals: [],
   selectedApproval: null,
   publishPreview: null,
@@ -124,9 +127,9 @@ function applyTheme() {
 function routeFromLocation() {
   if (location.pathname === "/dashboard/profit") return "profit";
   const path = location.pathname.replace(/^\/admin\/?/, "");
-  const page = (path.split("/")[0] || "overview").toLowerCase();
+  const page = (path.split("/")[0] || "operations").toLowerCase();
   if (page === "login") return "login";
-  return NAV.some((n) => n.id === page) ? page : "overview";
+  return NAV.some((n) => n.id === page) ? page : "operations";
 }
 
 function runIdFromLocation() {
@@ -173,11 +176,11 @@ function renderLogin() {
           <div class="brand-logo">${ICONS.logo}</div>
           <div class="brand-text">
             <div class="brand-name">AI 店长</div>
-            <p class="brand-sub">管理控制台</p>
+            <p class="brand-sub">小团队运营助手</p>
           </div>
         </div>
         <h1>登录</h1>
-        <p class="lead">TikTok Shop 泰国站 · 家居收纳。涉钱动作仍走审批闸门。</p>
+        <p class="lead">小团队运营助手 · 辅助选品、素材整理、投放计划与数据复盘。交易与履约在平台完成。</p>
         ${state.error ? `<p class="error">${esc(state.error)}</p>` : ""}
         <div class="field"><label>用户名</label><input name="username" autocomplete="username" required /></div>
         <div class="field"><label>密码</label><input name="password" type="password" autocomplete="current-password" required /></div>
@@ -194,7 +197,7 @@ function renderLogin() {
       const res = await login(String(fd.get("username") || ""), String(fd.get("password") || ""));
       state.user = res.user;
       window.__CSRF__ = res.csrf_token || "";
-      navigate("overview");
+      navigate("operations");
       await refreshShellData();
       render();
     } catch (err) {
@@ -252,7 +255,7 @@ function shell(bodyHtml) {
           <div class="brand-logo">${ICONS.logo}</div>
           <div class="brand-text">
             <div class="brand-name">AI 店长</div>
-            <p class="brand-sub">管理控制台</p>
+            <p class="brand-sub">小团队运营助手</p>
           </div>
         </div>
         <nav class="nav">${navHtml}</nav>
@@ -302,7 +305,7 @@ function bindShell() {
     overview: "OPERATIONS", workflows: "ORCHESTRATION", runs: "RUN QUEUE", agents: "AI AGENTS",
     scout: "SOURCING", spotcheck: "QUALITY", products: "CATALOG", profit: "PROFIT",
     approvals: "GOVERNANCE", cs: "SUPPORT", outreach: "CREATOR OPS", orders: "FULFILLMENT",
-    reports: "REPORTS", settings: "SETTINGS",
+    reports: "REPORTS", settings: "SETTINGS", records: "MODEL CALLS",
   };
   document.querySelectorAll(".page-head").forEach((head) => {
     const first = head.querySelector(":scope > div:first-child");
@@ -324,6 +327,7 @@ function bindShell() {
       // 切店要重载：各页数据都按 shop_id 取，只换标签不换数据会显示错配。
       state.activeShop = shopSwitch.value;
       state.shopGeneration += 1;
+      operationsWorkbench.clear();
       // 先清掉上一店的订单与 SLA，避免新店请求失败时旧列表仍可点开处理。
       state.syncedOrders = [];
       state.sla = null;
@@ -701,7 +705,10 @@ function pageProducts() {
   return `
     <div class="page-head">
       <div><h1>商品</h1><p>本地商品库（接现有 catalog API）。</p></div>
-      <button class="btn secondary" type="button" id="btn-import-demo">导入 Demo 包</button>
+      <div style="display:flex;gap:8px">
+        <a class="btn" href="/admin/candidates" data-nav="candidates">+ 录入候选商品</a>
+        <button class="btn secondary" type="button" id="btn-import-demo">导入 Demo 包</button>
+      </div>
     </div>
     <section class="panel"><div class="panel-body">
       ${
@@ -719,7 +726,7 @@ function pageProducts() {
             )
             .join("")}
           </tbody></table>`
-          : emptyState("商品库为空", "可从 Demo 交付包导入，或审批上架成功后自动写入。")
+          : emptyState("商品库为空", "请先在「日常运营 ➔ 候选商品」保存商品事实并生成 Listing 草稿，再前往审批页查看内容并人工审批。")
       }
     </div></section>
   `;
@@ -820,6 +827,13 @@ function renderSpotCheck(state) {
       "先用 demo 包或生成 listing 草稿，样本会出现在这里。"
     );
   }
+  const cohort = state.spotCheckCohort || [];
+  const cohortSet = new Set(cohort);
+  const matched = items.filter((it) => cohortSet.has(String(it.offer_id || ""))).length;
+  const cohortNote =
+    cohort.length && matched !== items.length
+      ? `<div class="tag failed" style="margin-bottom:8px">当前样本 ${items.length} 个，其中 ${matched} 个属于 M1 cohort（共 ${cohort.length} 个 offerId）—— 映射不上就不是 M1 抽样，本页结论不得当作 M1 验收。</div>`
+      : "";
   const head = criteria.map((c) => `<th>${esc(c.label)}</th>`).join("");
   const body = items
     .map((it, idx) => {
@@ -836,9 +850,11 @@ function renderSpotCheck(state) {
     })
     .join("");
   return `
+    ${cohortNote}
     <div class="muted" style="margin-bottom:8px">
-      门槛：通过率 ≥ ${(state.spotCheckThreshold * 100).toFixed(0)}%（DESIGN §9 Done 条件 2）。
-      未打分的格子不计入通过率。
+      门槛：<strong>十包中至少 ${state.spotCheckThresholdSamples ?? 8} 包四项全部通过</strong>
+      （即样本级通过率 ≥ ${((state.spotCheckThreshold ?? 0.8) * 100).toFixed(0)}%，DESIGN §9 Done 条件 2）。
+      某一包挂任一项即整包不通过；逐格比率只作诊断。
     </div>
     <table class="sc-table"><thead><tr><th>#</th><th>offer_id</th><th>输入标题</th>${head}</tr></thead>
     <tbody>${body}</tbody></table>
@@ -855,6 +871,8 @@ async function loadSpotCheckSamples() {
   state.spotCheck = data.items || [];
   state.spotCheckCriteria = data.criteria || [];
   state.spotCheckThreshold = data.threshold ?? 0.8;
+  state.spotCheckThresholdSamples = data.threshold_samples ?? 8;
+  state.spotCheckCohort = data.cohort || [];
   state.spotCheckReport = "";
 }
 
@@ -878,26 +896,51 @@ function collectSpotCheckRows() {
 
 async function scoreSpotCheck() {
   const rows = collectSpotCheckRows();
-  const resp = await api("/api/admin/spot-check/report", {
-    method: "POST",
-    body: JSON.stringify({ rows }),
-  });
+  const box = document.getElementById("spot-result");
+  let resp;
+  try {
+    resp = await api("/api/admin/spot-check/report", {
+      method: "POST",
+      body: JSON.stringify({ rows }),
+    });
+  } catch (err) {
+    // 422 时**保留**表格里已选的判定，只把定位信息显示出来 ——
+    // 不能让 owner 因为一次校验失败重填四十格。
+    let errs = [];
+    try {
+      const parsed = JSON.parse(err && err.message ? err.message : "");
+      if (parsed && Array.isArray(parsed.errors)) errs = parsed.errors;
+    } catch (_) {
+      errs = [];
+    }
+    const detailHtml = errs.length
+      ? errs.map((e) => `· ${esc(e.message || JSON.stringify(e))}`).join("<br>")
+      : esc(String((err && err.message) || err));
+    if (box) {
+      box.innerHTML = `
+        <div><span class="tag failed">报告被拒绝：未生成通过率</span></div>
+        <div class="muted" style="margin-top:6px">已选判定仍保留在表格里，修正后可直接重算。</div>
+        <div style="margin-top:6px">${detailHtml}</div>`;
+    }
+    return;
+  }
   state.spotCheckReport = resp.report_md || "";
   const sc = resp.scores || {};
   const rate = sc.pass_rate === null || sc.pass_rate === undefined
-    ? "无数据（尚未打分）"
+    ? sc.status === "no_data"
+      ? "无数据（尚未打分）"
+      : "未完成（样本未齐或仍有未打分）"
     : `${(sc.pass_rate * 100).toFixed(1)}%`;
   const verdict = sc.meets_threshold === null || sc.meets_threshold === undefined
     ? ""
     : sc.meets_threshold
     ? '<span class="tag approved">达标</span>'
     : '<span class="tag failed">未达标</span>';
-  const box = document.getElementById("spot-result");
   if (box) {
     box.innerHTML = `
-      <div><strong>通过率：${esc(rate)}</strong> ${verdict}</div>
-      <div class="muted">已打分 ${sc.scored ?? 0} 格（通过 ${sc.passed ?? 0} / 不通过 ${sc.failed ?? 0}），未打分 ${sc.pending ?? 0} 格</div>
-      <div class="muted">未打分的格子不计入通过率。</div>`;
+      <div><strong>通过率（样本级）：${esc(rate)}</strong> ${verdict}</div>
+      <div class="muted">整包四项全过 ${sc.whole_sample_passed ?? 0}/${sc.cohort_size ?? 10}；提交样本 ${sc.samples ?? 0} 个（命中 cohort ${sc.cohort_matched ?? 0} 个）</div>
+      <div class="muted">逐格诊断：已打分 ${sc.scored ?? 0} 格（通过 ${sc.passed ?? 0} / 不通过 ${sc.failed ?? 0}），未打分 ${sc.pending ?? 0} 格 —— 不是 M1 通过率。</div>`;
   }
 }
 
@@ -2135,6 +2178,7 @@ async function loadRuns(selectId) {
 }
 
 async function ensurePageData() {
+  if (OPERATIONS_ROUTES[state.route]) { if (!state.shops.length) await loadShops(); await operationsWorkbench.load(); return; }
   if (state.route === "overview") {
     await refreshShellData();
   } else if (state.route === "workflows") {
@@ -2767,10 +2811,15 @@ function bindPageActions() {
   });
 }
 
-async function render() {
+const operationsWorkbench = new OperationsWorkbench(api, () => ({shop: state.activeShop || "default", generation: state.shopGeneration, route: state.route, user: state.user}));
+let renderGeneration = 0;
+
+async function render(reload = true) {
+  const generation = ++renderGeneration;
   const root = document.getElementById("app");
   state.route = routeFromLocation();
   if (state.route !== "orders" || !state.user) orderWorkbench.clear();
+  if (!OPERATIONS_ROUTES[state.route] || !state.user) operationsWorkbench.clear();
   if (state.route === "login" || !state.user) {
     if (!state.user && state.route !== "login") {
       // try session
@@ -2791,8 +2840,12 @@ async function render() {
     }
   }
 
+  if (OPERATIONS_ROUTES[state.route] && reload) {
+    root.innerHTML = shell(`<p role="status" class="ops-empty">正在加载当前店铺运营数据…</p>`);
+    bindShell();
+  }
   try {
-    await ensurePageData();
+    if (reload) await ensurePageData();
   } catch (err) {
     if (err.status === 401) {
       state.user = null;
@@ -2804,7 +2857,9 @@ async function render() {
     state.pageError = err.message;
   }
 
+  if (generation !== renderGeneration) return;
   const pages = {
+    ...Object.fromEntries(Object.keys(OPERATIONS_ROUTES).map(k => [k, () => operationsWorkbench.render()])),
     overview: pageOverview,
     workflows: pageWorkflows,
     runs: pageRuns,
@@ -2825,6 +2880,7 @@ async function render() {
   state.pageError = "";
   bindShell();
   bindPageActions();
+  if (OPERATIONS_ROUTES[state.route]) operationsWorkbench.bind(root, render);
 }
 
 window.addEventListener("popstate", () => render());

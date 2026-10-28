@@ -120,6 +120,8 @@ pre, .mono { font-family: var(--mono); }
   font-size: 11px;
 }
 .nav-group { display: flex; flex-direction: column; gap: 2px; }
+/* 导航条目变多后必须自己滚动：侧栏固定 100vh，否则下方入口落到视口外点不到。 */
+.nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .nav-label {
   margin: 10px 10px 6px;
   font-size: 11px;
