@@ -66,7 +66,7 @@ def test_migration_v11_backfills_platform_and_allows_same_order_id(tmp_path: Pat
         ("legacy-1", "PAID", "{}", "tiktok_shop", "2026-10-19T00:00:00+00:00", "default"),
     )
     conn.commit()
-    assert M.apply_migrations(conn, backup=False) == 11
+    assert M.apply_migrations(conn, backup=False) == M.CURRENT_SCHEMA_VERSION
     row = conn.execute("SELECT platform FROM synced_orders WHERE order_id='legacy-1'").fetchone()
     assert row["platform"] == "tiktok"
     conn.execute(

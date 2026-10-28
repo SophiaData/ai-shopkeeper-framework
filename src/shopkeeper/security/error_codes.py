@@ -78,6 +78,10 @@ REGISTRY: dict[str, CodeSpec] = {
            meaning="API 响应缺少标题/价格/主图等关键字段。转人工补录。"),
         _c("A1688_FETCH_FAILED", ErrorKind.GENERATION, DEGRADE_MANUAL_TODO, human_todo=True,
            meaning="1688 Open API 货源适配器未预期异常已收束为失败结果（兜底）。转人工。"),
+        _c("A1688_ANTIBLOCK", ErrorKind.GENERATION, DEGRADE_MANUAL_TODO, human_todo=True,
+           meaning="1688 触发反爬滑块拦截（bxpunish/punish）。转人工补录或使用浏览器小书签。"),
+        _c("A1688_PARSE_ERROR", ErrorKind.GENERATION, DEGRADE_MANUAL_TODO, human_todo=True,
+           meaning="1688 页面内联 JSON 或结构体解析失败。转人工核对。"),
         _c("MANUAL_UNKNOWN", ErrorKind.VALIDATION, STOP_NO_RETRY, human_todo=True,
            meaning="补录失败且适配器未给错误体（兜底码）。"),
         # ---- 文案侧（LlmClient） ----

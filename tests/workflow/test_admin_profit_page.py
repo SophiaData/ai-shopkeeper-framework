@@ -45,7 +45,7 @@ def test_profit_page_source_is_readonly_and_styled_like_admin():
     page = _page_profit_source()
     main = SRC.read_text(encoding="utf-8")
     assert '{ id: "profit", label: "利润" }' in main
-    assert 'label: "运营"' in main
+    assert 'label: "日常运营"' in main
     assert "/api/workflow/profit" in page
     assert "/api/workflow/shops" in main
     assert "缺数据" in page

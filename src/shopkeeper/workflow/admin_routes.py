@@ -32,9 +32,13 @@ ADMIN_STATIC = Path(__file__).resolve().parent.parent / "admin" / "dist"
 from shopkeeper.workflow.spot_check import (  # noqa: E402 - 位置随 ADMIN_STATIC 之后
     CRITERIA,
     CRITERIA_LABELS,
+    M1_COHORT,
+    M1_SIZE,
+    M1_THRESHOLD_SAMPLES,
     PASS_THRESHOLD,
     render_report_markdown,
     score_spot_check,
+    validate_spot_check_rows,
 )
 
 #: 总览健康卡的**契约**：顺序与 id 都被 tests/workflow/test_admin_overview_page.py 钉住。
@@ -61,18 +65,45 @@ def _now_iso() -> str:
 
 
 def list_spot_check_samples(*, limit: int = 30) -> list[dict[str, Any]]:
-    """从 `artifacts/demo/packages` 读 listing 包，给抽检页提供样本（P0-09）。
+    """读 listing 包，给抽检页提供样本（P0-09）。
 
-    只读本地文件、不触网。包结构缺失时跳过该条而不是抛错 ——
-    抽检页不该因为一个坏包整个打不开。
+    目录默认 `artifacts/demo/packages`，可用 `SPOT_CHECK_PACKAGES_DIR` 覆盖
+    （M1 真实批次落在 `artifacts/m1_batch_<日期>/packages`，页面必须能指过去，
+    否则抽检页永远只看到 demo 夹具）。
+
+    `offer_id` 取自包里的**真 1688 offerId**，优先级：
+    `delivery.source_url` → `source_url` → 包内 `offer_id` 字段 → `listing_id`。
+    旧实现直接拿 `listing_id`（`listing_<hex>`）当 offer_id，导致 M1 cohort 永远
+    对不上，抽检页只会显示「映射不到 cohort」。
     """
     import json
+    import os
+    import re
 
-    packages = Path("artifacts") / "demo" / "packages"
+    raw_dir = (os.getenv("SPOT_CHECK_PACKAGES_DIR") or "").strip()
+    packages = Path(raw_dir) if raw_dir else (Path("artifacts") / "demo" / "packages")
     if not packages.is_dir():
         return []
+
+    def _offer_id(data: dict[str, Any], stem: str) -> str:
+        direct = str(data.get("offer_id") or "")
+        if direct:
+            return direct
+        delivery = data.get("delivery") if isinstance(data.get("delivery"), dict) else {}
+        for text in (str(delivery.get("source_url") or ""), str(data.get("source_url") or "")):
+            m = re.search(r"/offer/(\d{6,})", text)
+            if m:
+                return m.group(1)
+        return stem
+
     out: list[dict[str, Any]] = []
-    for path in sorted(packages.glob("listing_*.json")):
+    # 两种布局都要支持：
+    #   平铺： packages/listing_<id>.json            （旧 demo 产物）
+    #   目录： packages/listing_<id>/listing.json    （cli batch 的真实批次）
+    candidates = sorted(packages.glob("listing_*.json")) + sorted(
+        packages.glob("listing_*/listing.json")
+    )
+    for path in candidates:
         if len(out) >= limit:
             break
         try:
@@ -81,16 +112,28 @@ def list_spot_check_samples(*, limit: int = 30) -> list[dict[str, Any]]:
             continue
         versions = data.get("versions") if isinstance(data.get("versions"), list) else []
         first = versions[0] if versions and isinstance(versions[0], dict) else {}
+        # 图片目录：目录布局用 package 目录本身，平铺布局用同 stem 的目录
+        image_dir = path.parent if path.name == "listing.json" else path.parent / path.stem
+        image_files = sorted(str(p) for p in image_dir.rglob("*.png")) if image_dir.is_dir() else []
+        stem = image_dir.name if path.name == "listing.json" else path.stem
         out.append(
             {
-                "offer_id": str(data.get("listing_id") or path.stem),
+                "offer_id": _offer_id(data, stem),
                 "title": str(first.get("title") or ""),
                 "langs": [str(v.get("lang") or "") for v in versions if isinstance(v, dict)],
                 "images": sorted((data.get("images_by_lang") or {}).keys()),
+                "image_file_count": len(image_files),
+                "degraded": data.get("degraded") or [],
                 "usage": data.get("usage") or {},
                 "compliance": data.get("compliance") or {},
             }
         )
+    # 命中 M1 cohort 的按抽检表顺序排前面，其余按文件名顺序排在后面 ——
+    # 抽检页默认就该按「表的第 1 行到第 10 行」显示，而不是按随机目录名。
+    from shopkeeper.workflow.spot_check import M1_COHORT
+
+    order = {oid: idx for idx, oid in enumerate(M1_COHORT)}
+    out.sort(key=lambda r: (order.get(str(r["offer_id"]), len(order)), str(r["offer_id"])))
     return out
 
 
@@ -902,6 +945,9 @@ def run_admin_demo_orch(
 
 
 def mount_admin(app: FastAPI, service: WorkflowService) -> None:
+    from shopkeeper.workflow.operations import mount_operations
+
+    mount_operations(app, service.store, provider=service.provider)
     store = service.store
     dist = ADMIN_STATIC
     assets = dist / "assets"
@@ -961,7 +1007,11 @@ def mount_admin(app: FastAPI, service: WorkflowService) -> None:
 
     @app.get("/api/admin/spot-check")
     def spot_check_samples(limit: int = 30) -> dict[str, Any]:
-        """列出可抽检的 demo 包样本（P0-09）。只读本地包，不触网。"""
+        """列出可抽检的 demo 包样本（P0-09）。只读本地包，不触网。
+
+        `cohort` 是 M1 人工抽检的十个 offerId（权威来源 docs/m1-spot-check.md）。
+        页面读到的 demo 包若映射不到同一 cohort，**不得**自称 M1 抽样。
+        """
         rows = list_spot_check_samples(limit=max(1, min(int(limit or 30), 200)))
         return {
             "items": rows,
@@ -970,13 +1020,24 @@ def mount_admin(app: FastAPI, service: WorkflowService) -> None:
                 {"id": key, "label": CRITERIA_LABELS[key]} for key in CRITERIA
             ],
             "threshold": PASS_THRESHOLD,
-            "note": "四列由人工判定；未打分不计入通过率。",
+            "threshold_samples": M1_THRESHOLD_SAMPLES,
+            "cohort": list(M1_COHORT),
+            "cohort_size": M1_SIZE,
+            "note": "四列由人工判定；未打分不计入通过率。正式通过率按「十包中至少 "
+                    f"{M1_THRESHOLD_SAMPLES} 包四项全部通过」计算；逐格比率只作诊断。",
         }
 
     @app.post("/api/admin/spot-check/report")
     def spot_check_report(body: SpotCheckBody) -> dict[str, Any]:
-        """按提交的打分算出通过率并返回 md 报告（P0-09）。纯计算，不落库。"""
+        """按提交的打分算出**样本级**通过率并返回 md 报告（P0-09）。纯计算，不落库。
+
+        重复 offerId、cohort 外 ID、超过十个样本、非法判定值一律 422，并在 detail
+        里定位到 offerId / 字段 —— 不生成误导性的「达标」结果。
+        """
         rows = [row.model_dump() for row in body.rows]
+        errors = validate_spot_check_rows(rows)
+        if errors:
+            raise HTTPException(status_code=422, detail={"errors": errors})
         scores = score_spot_check(rows)
         report = render_report_markdown(rows, scores, generated_at=_now_iso())
         return {"scores": scores.to_dict(), "report_md": report}

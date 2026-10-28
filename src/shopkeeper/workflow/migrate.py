@@ -14,8 +14,10 @@ from typing import Callable
 from urllib.parse import quote
 
 # 当前目标版本。新增迁移时递增，并在 MIGRATIONS 登记。
-# v4=admin 鉴权表；v5=PDPA；v6=幂等审计；v7=多店 shop_id；v8=广告费记账。
-CURRENT_SCHEMA_VERSION = 11
+# v4=admin 鉴权表；v5=PDPA；v6=幂等审计；v7=多店 shop_id；v8=广告费记账；
+# v9=平台审核状态；v10、v11=后续补丁；v12=本地运营四表；v13=工作模型调用记录；v14=工作模型运行与结果回读；
+# v15=工作模型运行的输入关联上下文（质检与素材版本绑定）。
+CURRENT_SCHEMA_VERSION = 15
 
 BUSY_TIMEOUT_MS = 30_000
 CONNECT_TIMEOUT_S = 30.0
@@ -783,6 +785,34 @@ def _migrate_to_11(conn: sqlite3.Connection) -> None:
         raise
 
 
+def _migrate_to_12(conn: sqlite3.Connection) -> None:
+    """Persist the local selection/material/campaign/measurement workspace."""
+    from shopkeeper.workflow.operations_schema import ensure_operations_schema
+
+    ensure_operations_schema(conn)
+
+
+def _migrate_to_13(conn: sqlite3.Connection) -> None:
+    """Add the work-model call record table; results stay drafts, never platform state."""
+    from shopkeeper.workflow.operations_schema import ensure_work_model_schema
+
+    ensure_work_model_schema(conn)
+
+
+def _migrate_to_14(conn: sqlite3.Connection) -> None:
+    """Add work-model run and result storage with idempotency and audit linking."""
+    from shopkeeper.workflow.operations_schema import ensure_work_model_runs_schema
+
+    ensure_work_model_runs_schema(conn)
+
+
+def _migrate_to_15(conn: sqlite3.Connection) -> None:
+    """Add the server-side linkage context of a work-model run to its inputs."""
+    from shopkeeper.workflow.operations_schema import ensure_work_model_runs_linkage_column
+
+    ensure_work_model_runs_linkage_column(conn)
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     1: _migrate_to_1,
     2: _migrate_to_2,
@@ -795,6 +825,10 @@ MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     9: _migrate_to_9,
     10: _migrate_to_10,
     11: _migrate_to_11,
+    12: _migrate_to_12,
+    13: _migrate_to_13,
+    14: _migrate_to_14,
+    15: _migrate_to_15,
 }
 
 

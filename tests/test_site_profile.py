@@ -493,7 +493,7 @@ def test_currency_checks_remain_and_do_not_import_profile() -> None:
     migrate = (ROOT / "src/shopkeeper/workflow/migrate.py").read_text(encoding="utf-8")
     assert "CHECK (currency = 'THB')" in migrate
     assert migrate.count("CHECK (currency = 'THB')") == 1
-    assert "CURRENT_SCHEMA_VERSION = 11" in migrate
+    assert "CURRENT_SCHEMA_VERSION = 15" in migrate
     assert "CHECK (currency !=" not in migrate
     ads = (ROOT / "src/shopkeeper/adapters/tiktok_ads.py").read_text(encoding="utf-8")
     assert '!= "THB"' in ads

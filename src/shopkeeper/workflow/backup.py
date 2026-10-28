@@ -394,6 +394,212 @@ def verify_restored_schema(path: Path) -> dict[str, Any]:
     }
 
 
+def _sqlite_quick_check(path: Path) -> tuple[bool, str]:
+    """只读打开库做 ``PRAGMA quick_check``，返回 ``(是否完好, 详情)``。
+
+    损坏的备份必须在**写盘之前**被识别：把损坏文件拷进生产库，等于把
+    「可回滚」变成「不可回滚」。
+    """
+    try:
+        conn = sqlite3.connect(f"file:{quote(path.as_posix(), safe='/:')}?mode=ro", uri=True)
+        try:
+            row = conn.execute("PRAGMA quick_check").fetchone()
+        finally:
+            conn.close()
+    except sqlite3.Error as exc:
+        return False, f"无法读取该库：{exc}"
+    if not row:
+        return False, "quick_check 没有返回结果。"
+    detail = str(row[0])
+    return detail.lower() == "ok", detail
+
+
+def _has_schema_version(path: Path) -> bool:
+    """库里是否有 ``schema_version`` 表（用来认工作台主库）。"""
+    try:
+        probe = sqlite3.connect(f"file:{quote(path.as_posix(), safe='/:')}?mode=ro", uri=True)
+        try:
+            row = probe.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_version'"
+            ).fetchone()
+        finally:
+            probe.close()
+        return row is not None
+    except sqlite3.Error:
+        return False
+
+
+def _read_manifest_entries(src_dir: Path) -> list[dict[str, Any]]:
+    """从 manifest（或目录扫描兜底）读出待恢复条目。"""
+    manifest_path = src_dir / "manifest.json"
+    if manifest_path.is_file():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        return list(manifest.get("files") or [])
+    entries: list[dict[str, Any]] = []
+    for path in sorted(src_dir.rglob("*")):
+        if not path.is_file() or path.name == "manifest.json":
+            continue
+        rel = path.relative_to(src_dir).as_posix()
+        kind = "db" if path.suffix.lower() == ".db" else "jsonl"
+        entries.append({"kind": kind, "rel": rel})
+    return entries
+
+
+def _plan_restore(
+    entries: list[dict[str, Any]],
+    src_dir: Path,
+    art: Path,
+    main_db_name: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+    """**只读**地规划一次恢复：校验路径合法性、文件存在性、库完整性与 schema 版本。
+
+    返回 ``(计划, schema 检查, 阻断原因)``。任何阻断原因非空时，调用方**不得**
+    写生产库 —— 这是 O-21 的核心契约：拒绝必须发生在覆盖之前。
+    """
+    planned: list[dict[str, Any]] = []
+    checks: list[dict[str, Any]] = []
+    blocking: list[str] = []
+
+    for entry in entries:
+        rel = str(entry.get("rel") or "")
+        if not rel or rel in {".", ".."} or ".." in Path(rel).parts:
+            blocking.append(f"非法相对路径：{rel!r}")
+            continue
+        src = src_dir / Path(*rel.split("/"))
+        if not src.is_file():
+            blocking.append(f"备份缺少文件：{src}")
+            continue
+        kind = str(entry.get("kind") or ("db" if src.suffix.lower() == ".db" else "jsonl"))
+        planned.append({"kind": kind, "rel": rel, "src": src, "dst": art / Path(*rel.split("/"))})
+
+    # 完整性 + 版本校验都针对**备份源文件**，不碰生产库。
+    for item in planned:
+        if item["kind"] != "db":
+            continue
+        src: Path = item["src"]
+        ok, detail = _sqlite_quick_check(src)
+        if not ok:
+            blocking.append(f"{item['rel']}: 备份文件损坏（quick_check={detail}），拒绝恢复。")
+            continue
+        # 只校验工作台主库：artifacts 下的普通 .db（demo 包的 shop.db 之类）
+        # 没有 schema_version 表，不能拿工作台的版本标准去要求它们。
+        if Path(item["rel"]).name != main_db_name and not _has_schema_version(src):
+            continue
+        check = verify_restored_schema(src)
+        check["path"] = str(src)
+        checks.append(check)
+        if check["status"] == "ahead":
+            blocking.append(
+                f"{item['rel']}: 备份 schema v{check['schema_version']} 比代码期望的 "
+                f"v{check['expected']} 新，拒绝恢复（会缺列）。"
+            )
+        elif check["status"] == "missing":
+            for problem in check["problems"]:
+                log.warning("restore schema check: %s", problem)
+        elif check["status"] == "behind":
+            for problem in check["problems"]:
+                log.warning("restore schema check: %s", problem)
+
+    return planned, checks, blocking
+
+
+def _stage_restore(planned: list[dict[str, Any]], art: Path) -> Path:
+    """把待恢复内容全部准备到临时目录，成功后才替换生产文件。
+
+    「准备」与「替换」分开，是为了让**任何一步失败都不留下半库**：损坏文件在
+    临时目录里就失败，生产库根本没被碰过。
+    """
+    stage_root = art / f".restore-stage-{os.getpid()}"
+    if stage_root.exists():
+        shutil.rmtree(stage_root, ignore_errors=True)
+    stage_root.mkdir(parents=True, exist_ok=True)
+    try:
+        for item in planned:
+            src: Path = item["src"]
+            staged = stage_root / Path(*str(item["rel"]).split("/"))
+            staged.parent.mkdir(parents=True, exist_ok=True)
+            if item["kind"] == "db":
+                sqlite_consistent_copy(src, staged)
+            else:
+                shutil.copy2(src, staged)
+            item["staged"] = staged
+    except Exception:
+        shutil.rmtree(stage_root, ignore_errors=True)
+        raise
+    return stage_root
+
+
+def _wal_sidecars(db_path: Path) -> tuple[Path, Path]:
+    """返回 WAL 模式的两个边车文件路径（``-wal`` / ``-shm``）。"""
+    return (
+        db_path.with_name(db_path.name + "-wal"),
+        db_path.with_name(db_path.name + "-shm"),
+    )
+
+
+def _snapshot_for_rollback(dst: Path, kind: str) -> Path | None:
+    """替换前给生产文件留一份可回滚快照。
+
+    库文件用 ``sqlite3 backup`` API 做**一致性**快照：直接 ``copy2`` 会漏掉
+    还在 WAL 里、尚未 checkpoint 的事务内容，回滚回去就丢数据。
+    """
+    if not dst.exists():
+        return None
+    snapshot = dst.with_name(f"{dst.name}.restore-rollback")
+    if kind == "db":
+        sqlite_consistent_copy(dst, snapshot)
+    else:
+        shutil.copy2(dst, snapshot)
+    return snapshot
+
+
+def _commit_restore(planned: list[dict[str, Any]], art: Path, stage_root: Path) -> list[str]:
+    """把暂存内容替换进生产库；任一步失败即回滚到替换前的样子。
+
+    库文件替换时必须一并清掉旧的 ``-wal`` / ``-shm`` 边车文件：留着上一代库的
+    WAL 边车，新库打开时 SQLite 会拿旧 WAL 做恢复，内容会串。
+    """
+    replaced: list[tuple[Path, Path | None, str]] = []
+    try:
+        for item in planned:
+            staged: Path = item["staged"]
+            dst: Path = item["dst"]
+            kind = str(item["kind"])
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            snapshot = _snapshot_for_rollback(dst, kind)
+            if kind == "db":
+                wal, shm = _wal_sidecars(dst)
+                wal.unlink(missing_ok=True)
+                shm.unlink(missing_ok=True)
+            try:
+                shutil.move(str(staged), str(dst))
+            except OSError:
+                # move 跨设备/占用失败时退回复制
+                shutil.copy2(staged, dst)
+            replaced.append((dst, snapshot, kind))
+    except Exception:
+        # 回滚：把替换前的内容放回去，删除这次新增的文件。
+        for dst, snapshot, kind in reversed(replaced):
+            try:
+                if snapshot is not None and snapshot.exists():
+                    if kind == "db":
+                        shutil.copy2(snapshot, dst)
+                        wal, shm = _wal_sidecars(dst)
+                        wal.unlink(missing_ok=True)
+                        shm.unlink(missing_ok=True)
+                    else:
+                        shutil.copy2(snapshot, dst)
+                    snapshot.unlink(missing_ok=True)
+                else:
+                    dst.unlink(missing_ok=True)
+            except OSError:
+                log.exception("restore rollback failed for %s", dst)
+        raise
+    finally:
+        shutil.rmtree(stage_root, ignore_errors=True)
+    return [str(item["rel"]) for item in planned]
+
+
 def restore_backup(
     stamp: str,
     *,
@@ -402,7 +608,18 @@ def restore_backup(
     backups_root: Path | None = None,
     env: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """从 stamp 目录恢复到 artifacts。必须 confirm=YES。"""
+    """从 stamp 目录恢复到 artifacts。必须 confirm=YES。
+
+    恢复分三段：**只读校验 → 暂存准备 → 替换提交**。
+
+    - 校验段只读备份源文件（quick_check + schema 版本），任何阻断都在**写生产库
+      之前**发生。旧实现是「先覆盖、后校验」：实测把超前版本的备份恢复到一个
+      有生产数据的库上时，恢复被拒绝了，但生产库已经被那份超前备份覆盖，原数据
+      全丢 —— 拒绝得毫无意义。
+    - 准备段把全部内容写到 ``artifacts/.restore-stage-<pid>/``；损坏文件在这一步
+      就失败，生产库不受影响（旧实现抛裸 ``sqlite3.DatabaseError`` 并留下半库）。
+    - 提交段才替换生产文件；替换途中失败会回滚到替换前的样子。
+    """
     if str(confirm).strip() != RESTORE_CONFIRM:
         raise BackupError(f"恢复需要显式确认参数 --confirm {RESTORE_CONFIRM}")
 
@@ -412,85 +629,19 @@ def restore_backup(
     if not src_dir.is_dir():
         raise BackupError(f"找不到备份：{src_dir}")
 
-    manifest_path = src_dir / "manifest.json"
-    if manifest_path.is_file():
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        entries = list(manifest.get("files") or [])
-    else:
-        entries = []
-        for path in sorted(src_dir.rglob("*")):
-            if not path.is_file() or path.name == "manifest.json":
-                continue
-            rel = path.relative_to(src_dir).as_posix()
-            kind = "db" if path.suffix.lower() == ".db" else "jsonl"
-            entries.append({"kind": kind, "rel": rel})
-
+    entries = _read_manifest_entries(src_dir)
     if not entries:
         raise BackupError(f"备份为空：{src_dir}")
 
-    art.mkdir(parents=True, exist_ok=True)
-    restored: list[str] = []
-    for entry in entries:
-        rel = str(entry.get("rel") or "")
-        if not rel or rel in {".", ".."} or ".." in Path(rel).parts:
-            raise BackupError(f"非法相对路径：{rel!r}")
-        src = src_dir / Path(*rel.split("/"))
-        dst = art / Path(*rel.split("/"))
-        if not src.is_file():
-            raise BackupError(f"备份缺少文件：{src}")
-        kind = str(entry.get("kind") or ("db" if src.suffix.lower() == ".db" else "jsonl"))
-        if kind == "db":
-            sqlite_consistent_copy(src, dst)
-        else:
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst)
-        restored.append(rel)
-
-    # 恢复后校验（P1-03）：把「库版本 vs 代码期望」讲清楚，别让它在运行时才炸。
-    #
-    # 只校验**工作台主库**。`collect_db_files` 会把 artifacts 下**所有** .db 都备份
-    # 进来（demo 包里的 shop.db 之类），那些是普通 SQLite 文件、没有 schema_version
-    # 表，不能拿工作台的版本标准去要求它们——一刀切会把这些正常文件判成「非法」并
-    # 拒绝整个恢复（实测踩到：test_backup_restore_roundtrip_preserves_data 转红）。
     main_db_name = Path(str(_env(env).get("WORKFLOW_DB_PATH") or DEFAULT_WORKFLOW_DB)).name
-
-    def _has_schema_version(path: Path) -> bool:
-        try:
-            probe = sqlite3.connect(path)
-            try:
-                row = probe.execute(
-                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_version'"
-                ).fetchone()
-            finally:
-                probe.close()
-            return row is not None
-        except sqlite3.Error:
-            return False
-
-    checks: list[dict[str, Any]] = []
-    blocking: list[str] = []
-    for rel in restored:
-        target = art / Path(*rel.split("/"))
-        if target.suffix.lower() != ".db":
-            continue
-        # 优先按 WORKFLOW_DB_PATH 识别主库；测试/多库环境里环境变量可能不同，
-        # 只要恢复出来的库自带 schema_version，就按工作台库校验。
-        if target.name != main_db_name and not _has_schema_version(target):
-            continue
-        check = verify_restored_schema(target)
-        checks.append(check)
-        if check["status"] == "ahead":
-            blocking.append(
-                f"{rel}: 备份 schema v{check['schema_version']} 比代码期望的 "
-                f"v{check['expected']} 新，拒绝恢复（会缺列）。"
-            )
-        elif check["status"] in {"missing", "behind"}:
-            for problem in check["problems"]:
-                log.warning("restore schema check: %s", problem)
-
+    planned, checks, blocking = _plan_restore(entries, src_dir, art, main_db_name)
     if blocking:
-        # 已经写盘了，但必须大声失败：调用方据非零退出码判断，不会当作成功继续跑。
-        raise BackupError("恢复后校验未通过：\n" + "\n".join(blocking))
+        # 拒绝必须发生在写盘之前：生产库此刻仍是原样。
+        raise BackupError("恢复前校验未通过（未改动生产库）：\n" + "\n".join(blocking))
+
+    art.mkdir(parents=True, exist_ok=True)
+    stage_root = _stage_restore(planned, art)
+    restored = _commit_restore(planned, art, stage_root)
 
     for check in checks:
         for problem in check["problems"]:

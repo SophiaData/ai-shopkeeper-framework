@@ -79,6 +79,7 @@ def test_backup_survives_failed_migration(tmp_path):
     conn = _db_at_version(db, 7)
 
     original = dict(M.MIGRATIONS)
+    original_version = M.CURRENT_SCHEMA_VERSION
 
     def boom(c):
         c.execute("CREATE TABLE half_done (x INTEGER)")
@@ -97,7 +98,7 @@ def test_backup_survives_failed_migration(tmp_path):
     finally:
         M.MIGRATIONS.clear()
         M.MIGRATIONS.update(original)
-        M.CURRENT_SCHEMA_VERSION = 11
+        M.CURRENT_SCHEMA_VERSION = original_version
 
     # 但副本是干净的，可据此恢复
     backup = sorted(tmp_path.glob("workflow.db.premigrate.v*"))[0]

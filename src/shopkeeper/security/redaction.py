@@ -234,6 +234,9 @@ _SECRET_QUERY_KEYS = (
     "secret",
     "password",
     "authorization",
+    "proxy-authorization",
+    "cookie",
+    "set-cookie",
 )
 _SECRET_QUERY_ALT = "|".join(re.escape(k) for k in _SECRET_QUERY_KEYS)
 # 匹配 `key=value`（value 到下一个 & 或空白/引号为止），保留 key 与前缀符号。
@@ -248,10 +251,10 @@ _SECRET_QUERY_PATTERN = re.compile(
     rf"(?P<prefix>(?:^|[?&\s\"'{{,]|\\)\s*\"?)"
     rf"(?P<key>{_SECRET_QUERY_ALT})"
     rf"(?P<closekey>\"?)(?P<sep>\s*[:=]\s*)"
-    # value 允许被引号包起来（JSON / Python dict 形态）。
-    # 引号分两组（开/闭）分别捕获：用反向引用 `(?P=quote)` 会把闭引号也吃掉，
-    # 从 `{"access_token":"X"}` 变成 `{"access_token:"[REDACTED]"}` —— 结构被改坏。
-    rf"(?P<quote>[\"']?)(?P<value>[^&\s\"'<>]+)(?P<endquote>[\"']?)",
+    # 值可以是整段被引号包起来的内容（`?cookie="sid=abc"`），也可以是普通的
+    # `k=v` 串（Cookie 常见 `k=v; k2=v2`）；两种都整体替换，避免只清掉一半。
+    rf"(?:(?P<quote>[\"'])(?P<qvalue>[^&\n]*?)(?P=quote)"
+    rf"|(?P<value>[^&\s;]+(?:;\s*[^&\s]+)*))",
     re.IGNORECASE | re.MULTILINE,
 )
 # header 形态：`x-tts-access-token: tok_xxx` 或 `Authorization: Bearer xxx`
@@ -261,10 +264,20 @@ _SECRET_QUERY_PATTERN = re.compile(
 # 现有测试用的是 `sk-...` 样本，被 `_SECRET_LITERAL_PATTERN` 兜住了 ——
 # 于是这条规则看起来是好的，实际对真实 JWT / ROW_ / t- 开头的 token 全都漏。
 _SECRET_HEADER_PATTERN = re.compile(
-    r"(?P<prefix>(?:^|\s)(?:authorization|x-[\w-]*(?:token|secret|key)[\w-]*)\s*:\s*)"
-    r"(?:(?:Bearer|Basic|Digest|Token|OAuth)\s+)?"
-    r"(?P<value>[^\s\"'<>]+)",
+    r'(?P<prefix>(?:^|[\s"\'{,])["\']?'
+    r'(?:authorization|proxy-authorization|x-authorization|api-key|api_key|cookie|set-cookie|'
+    r'x-[\w-]*(?:token|secret|key)[\w-]*)["\']?\s*[:=]\s*)'
+    # 认证方案只是值的一部分；Digest/AWS4/Negotiate 还带参数，只吃 scheme 会留下值。
+    r'(?P<scheme>(?:(?:Bearer|Basic|Digest|Token|OAuth|Negotiate|AWS4-HMAC-SHA256)\s+)?)'
+    # 整段值：引号包裹吃引号内全部内容，否则吃到行尾（header 的值不会跨行）。
+    r'(?:(?P<quote>["\'])(?P<qvalue>[^\n]*?)(?P=quote)'
+    r'|(?P<value>[^\n]*))',
     re.IGNORECASE | re.MULTILINE,
+)
+# 裸认证方案（没有 header 名）：`Bearer <token>`。显式方案名本身就是强信号。
+_SECRET_BEARER_PATTERN = re.compile(
+    r"\b(?P<scheme>Bearer)\s+(?P<value>[A-Za-z0-9_.\-=+/]{8,})",
+    re.IGNORECASE,
 )
 # 常见密钥字面量：sk-xxx / LTAIxxx（与 check_desktop_scaffold 的形态一致，但这里是通用防线）
 _SECRET_LITERAL_PATTERN = re.compile(r"\b(?:sk-[A-Za-z0-9]{16,}|LTAI[0-9A-Za-z]{12,})\b")
@@ -285,17 +298,35 @@ def _scrub_secrets(text: str) -> tuple[str, int]:
         """
         nonlocal hits
         hits += 1
-        return (
+        head = (
             f"{match.group('prefix')}{match.group('key')}{match.group('closekey')}"
-            f"{match.group('sep')}{match.group('quote')}"
-            f"{REDACTED}{match.group('endquote')}"
+            f"{match.group('sep')}"
         )
+        already = (match.group('qvalue') if match.group('qvalue') is not None
+                   else match.group('value')) or ''
+        if already.strip() == REDACTED:
+            return match.group(0)
+        if match.group('qvalue') is not None:
+            quote = match.group('quote')
+            return f"{head}{quote}{REDACTED}{quote}"
+        return f"{head}{REDACTED}"
 
     def _h(match: re.Match[str]) -> str:
         nonlocal hits
         hits += 1
-        # prefix 已含 `key: ` 与方案名（如 `Authorization: `），直接接 [REDACTED]。
-        return f"{match.group('prefix')}{REDACTED}"
+        head = match.group('prefix')
+        if match.group('qvalue') is not None:
+            quote = match.group('quote')
+            return f"{head}{quote}{REDACTED}{quote}"
+        value = match.group('value') or ''
+        carriage_return = '\r' if value.endswith('\r') else ''
+        return f"{head}{REDACTED}{carriage_return}"
+
+    def _b(match: re.Match[str]) -> str:
+        """裸 `Bearer <token>`：显式认证方案本身就是强信号，直接替换。"""
+        nonlocal hits
+        hits += 1
+        return f"{match.group('scheme')} {REDACTED}"
 
     def _l(match: re.Match[str]) -> str:
         nonlocal hits
@@ -309,7 +340,9 @@ def _scrub_secrets(text: str) -> tuple[str, int]:
     # `Authorization: Bearer <token>` 只吃到 `Bearer`，把真正的 token 留下，
     # 且吃掉之后 header 规则再也匹配不上（前缀已被替换）。
     # 先跑 header 规则，它认识 `Bearer`/`Basic` 等方案名，能连 token 一起打掉。
+    # 裸 `Bearer <token>`（无 header 名）随后处理；再跑 query 与字面量。
     out = _SECRET_HEADER_PATTERN.sub(_h, text)
+    out = _SECRET_BEARER_PATTERN.sub(_b, out)
     out = _SECRET_QUERY_PATTERN.sub(_q, out)
     out = _SECRET_LITERAL_PATTERN.sub(_l, out)
     return out, hits
