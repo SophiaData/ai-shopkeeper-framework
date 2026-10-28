@@ -8,11 +8,13 @@
 
 | 错误码 | kind | 处置 | 转人工 | 含义 |
 |--------|------|------|--------|------|
+| `A1688_ANTIBLOCK` | generation | 降级 → 人工待办 | ✅ | 1688 触发反爬滑块拦截（bxpunish/punish）。转人工补录或使用浏览器小书签。 |
 | `A1688_API_ERROR` | generation | 降级 → 人工待办 | ✅ | 1688 Open API 返回业务错误或非 JSON。转人工核对；不把错误当成功。 |
 | `A1688_FETCH_FAILED` | generation | 降级 → 人工待办 | ✅ | 1688 Open API 货源适配器未预期异常已收束为失败结果（兜底）。转人工。 |
 | `A1688_HTTP_ERROR` | generation | 降级 → 人工待办 | ✅ | 1688 Open API HTTP/传输失败。生成类可降级人工补录；不重轰。 |
 | `A1688_MISSING_CREDENTIALS` | validation | 立即停，**不自动重试** | ✅ | ALIBABA_1688_ENABLED=1 但缺少 APP_KEY/APP_SECRET/ACCESS_TOKEN。不签名、不外呼；工厂层亦会回退 MockProductSource。 |
 | `A1688_PARSE_EMPTY` | generation | 降级 → 人工待办 | ✅ | API 响应缺少标题/价格/主图等关键字段。转人工补录。 |
+| `A1688_PARSE_ERROR` | generation | 降级 → 人工待办 | ✅ | 1688 页面内联 JSON 或结构体解析失败。转人工核对。 |
 | `A1688_TIMEOUT` | generation | 重试 ≤2 次，耗尽转人工待办 | — | 1688 Open API 超时。生成类可有限重试，耗尽转人工。 |
 | `ADS_API_ERROR` | execution | 立即停，**不自动重试** | ✅ | TikTok Ads 返回非 0 code、非 JSON，或报表结构不能安全记账。不把缺字段当成零花费，不改预算。 |
 | `ADS_AUTH_FAILED` | execution | 立即停，**不自动重试** | ✅ | TikTok Ads 只读 GET 返回 401 或 403。不改预算。错误信息不含 Access-Token。 |
